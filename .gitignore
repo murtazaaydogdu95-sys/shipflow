@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# IDE
+.idea/
+
+# SQLite (legacy)
+dev.db
+dev.db-journal
+
+# Prisma migrations (we use db push)
+prisma/migrations/
+
+# MCP server build artifacts
+packages/mcp-server/node_modules/
+packages/mcp-server/dist/
+packages/mcp-server/.next/
+packages/mcp-server/.mcp.json
+
+# GitHub-imported repos
+shipflow/

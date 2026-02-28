@@ -13,6 +13,7 @@ interface BoardColumnProps {
   title: string;
   stories: StoryWithRelations[];
   onStoryClick: (story: StoryWithRelations) => void;
+  onStoryDelete?: (storyId: string) => void;
 }
 
 const columnColors: Record<string, string> = {
@@ -23,7 +24,7 @@ const columnColors: Record<string, string> = {
   DONE: "bg-green-500",
 };
 
-export function BoardColumn({ id, title, stories, onStoryClick }: BoardColumnProps) {
+export function BoardColumn({ id, title, stories, onStoryClick, onStoryDelete }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const totalPoints = stories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
 
@@ -55,6 +56,7 @@ export function BoardColumn({ id, title, stories, onStoryClick }: BoardColumnPro
                 key={story.id}
                 story={story}
                 onClick={() => onStoryClick(story)}
+                onDelete={onStoryDelete}
               />
             ))}
           </SortableContext>

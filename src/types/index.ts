@@ -41,6 +41,9 @@ export type StoryStatus = (typeof STORY_STATUSES)[number];
 export const PRIORITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type Priority = (typeof PRIORITIES)[number];
 
+export const STORY_TYPES = ["feature", "bug", "chore", "refactor", "docs", "test"] as const;
+export type StoryType = (typeof STORY_TYPES)[number];
+
 export const SPRINT_STATUSES = ["PLANNING", "ACTIVE", "COMPLETED"] as const;
 export type SprintStatus = (typeof SPRINT_STATUSES)[number];
 

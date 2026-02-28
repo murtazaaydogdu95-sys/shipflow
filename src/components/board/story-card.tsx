@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { StoryWithRelations } from "@/types";
-import { Bot, GripVertical } from "lucide-react";
+import { Bot, Globe, GripVertical, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const priorityColors: Record<string, string> = {
@@ -13,20 +13,31 @@ const priorityColors: Record<string, string> = {
   LOW: "bg-gray-400 text-white",
 };
 
+const typeColors: Record<string, string> = {
+  feature: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+  bug: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  chore: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  refactor: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+  docs: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  test: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
+};
+
 interface StoryCardProps {
   story: StoryWithRelations;
   onClick?: () => void;
+  onDelete?: (storyId: string) => void;
   isDragging?: boolean;
 }
 
-export function StoryCard({ story, onClick, isDragging }: StoryCardProps) {
+export function StoryCard({ story, onClick, onDelete, isDragging }: StoryCardProps) {
   const completedAC = story.acceptanceCriteria.filter((ac) => ac.completed).length;
   const totalAC = story.acceptanceCriteria.length;
+  const storyType = (story as StoryWithRelations & { type?: string }).type;
 
   return (
     <Card
       className={cn(
-        "p-3 cursor-pointer hover:border-primary/50 transition-all group",
+        "p-3 cursor-pointer hover:border-primary/50 transition-all group relative",
         isDragging && "opacity-50 rotate-2 shadow-lg"
       )}
       onClick={onClick}
@@ -34,11 +45,28 @@ export function StoryCard({ story, onClick, isDragging }: StoryCardProps) {
       <div className="flex items-start gap-2">
         <GripVertical className="h-4 w-4 mt-0.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         <div className="flex-1 min-w-0">
+          {onDelete && (
+            <button
+              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(story.id);
+              }}
+              title="Delete story"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           <div className="flex items-center gap-1.5 mb-1">
             <span className="text-xs text-muted-foreground font-mono">{story.shortId}</span>
             <Badge className={cn("text-[10px] px-1 py-0 h-4", priorityColors[story.priority])}>
               {story.priority[0]}
             </Badge>
+            {storyType && storyType !== "feature" && (
+              <Badge className={cn("text-[10px] px-1 py-0 h-4", typeColors[storyType])}>
+                {storyType}
+              </Badge>
+            )}
             {story.assignedToAgent && (
               <span className="inline-flex items-center gap-0.5">
                 <Bot className={cn(
@@ -64,6 +92,12 @@ export function StoryCard({ story, onClick, isDragging }: StoryCardProps) {
                     {story.agentStatus === "FAILED" && "Failed"}
                   </span>
                 )}
+              </span>
+            )}
+            {story.previewPort && story.status === "REVIEW" && (
+              <span className="inline-flex items-center gap-0.5">
+                <Globe className="h-3.5 w-3.5 text-green-500 animate-pulse" />
+                <span className="text-[9px] font-medium text-green-500">Preview Live</span>
               </span>
             )}
           </div>

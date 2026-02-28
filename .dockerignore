@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+dev.db
+dev.db-journal
+.env
+.env.*
+!.env.example
+.idea
+shipflow/
+packages/mcp-server/node_modules
+packages/mcp-server/dist
+.DS_Store
+*.pem
+npm-debug.log*
+.vercel
+coverage

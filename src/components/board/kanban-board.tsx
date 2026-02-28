@@ -133,6 +133,13 @@ export function KanbanBoard({ initialColumns, projectId, projectName, labels, te
             stories: (grouped[col.id] || []).sort((a, b) => a.position - b.position),
           }))
         );
+
+        // Keep selected story in sync with latest data
+        setSelectedStory((prev) => {
+          if (!prev) return prev;
+          const updated = stories.find((s) => s.id === prev.id);
+          return updated || prev;
+        });
       } catch {
         // ignore polling errors
       }
@@ -278,6 +285,8 @@ export function KanbanBoard({ initialColumns, projectId, projectName, labels, te
         stories: col.stories.map((s) => (s.id === story.id ? story : s)),
       }))
     );
+    // Keep selected story in sync
+    setSelectedStory((prev) => (prev?.id === story.id ? story : prev));
   };
 
   // Register callback so new stories appear on the board immediately

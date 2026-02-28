@@ -46,9 +46,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
   const body = await req.json();
   const data = createStorySchema.parse(body);
 
-  // Generate shortId
-  const count = await prisma.story.count({ where: { projectId } });
-  const shortId = `SF-${String(count + 1).padStart(3, "0")}`;
+  // Generate shortId — find the highest existing number to avoid collisions from deleted stories
+  const lastShortId = await prisma.story.findFirst({
+    where: { projectId },
+    orderBy: { shortId: "desc" },
+    select: { shortId: true },
+  });
+  const nextNum = lastShortId
+    ? parseInt(lastShortId.shortId.replace(/\D/g, ""), 10) + 1
+    : 1;
+  const shortId = `SF-${String(nextNum).padStart(3, "0")}`;
 
   // Get next position
   const lastStory = await prisma.story.findFirst({
