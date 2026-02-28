@@ -18,7 +18,8 @@ import { StoryCard } from "./story-card";
 import { StoryDetailModal } from "@/components/stories/story-detail-modal";
 import { useQuickCapture } from "@/components/providers/quick-capture-provider";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Plus, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import type { StoryWithRelations, BoardColumn as BoardColumnType } from "@/types";
 import { STORY_STATUSES, COLUMN_TITLES } from "@/types";
@@ -26,17 +27,68 @@ import { STORY_STATUSES, COLUMN_TITLES } from "@/types";
 interface KanbanBoardProps {
   initialColumns: BoardColumnType[];
   projectId: string;
+  projectName: string;
   labels: Array<{ id: string; name: string; color: string }>;
   techStack?: string | null;
 }
 
-export function KanbanBoard({ initialColumns, projectId, labels, techStack }: KanbanBoardProps) {
+export function KanbanBoard({ initialColumns, projectId, projectName, labels, techStack }: KanbanBoardProps) {
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
   const [activeStory, setActiveStory] = useState<StoryWithRelations | null>(null);
   const [selectedStory, setSelectedStory] = useState<StoryWithRelations | null>(null);
   const [mounted, setMounted] = useState(false);
   const knownReviewIds = useRef<Set<string>>(new Set());
   const { openQuickCapture, onStoryCreated } = useQuickCapture();
+
+  const [boardTitle, setBoardTitle] = useState(projectName);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(projectName);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  const handleTitleSave = async () => {
+    const trimmed = editingTitle.trim();
+    if (!trimmed || trimmed === boardTitle) {
+      setIsEditingTitle(false);
+      setEditingTitle(boardTitle);
+      return;
+    }
+
+    setIsSavingTitle(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!res.ok) throw new Error();
+      setBoardTitle(trimmed);
+      setIsEditingTitle(false);
+      toast.success("Board title updated");
+    } catch {
+      toast.error("Failed to update title");
+      setEditingTitle(boardTitle);
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
+
+  const handleTitleCancel = () => {
+    setEditingTitle(boardTitle);
+    setIsEditingTitle(false);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleTitleSave();
+    if (e.key === "Escape") handleTitleCancel();
+  };
 
   // Prevent DndContext hydration mismatch — only mount after client hydration
   useEffect(() => setMounted(true), []);
@@ -244,8 +296,52 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold">Sprint Board</h2>
+        <div className="flex items-center gap-2">
+          {isEditingTitle ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                ref={titleInputRef}
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={handleTitleSave}
+                maxLength={100}
+                disabled={isSavingTitle}
+                className="h-8 text-lg font-semibold w-64"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={handleTitleSave}
+                disabled={isSavingTitle}
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleTitleCancel}
+                disabled={isSavingTitle}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <h2 className="text-lg font-semibold">{boardTitle}</h2>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => setIsEditingTitle(true)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
         </div>
         <Button size="sm" onClick={openQuickCapture}>
           <Plus className="mr-1 h-4 w-4" />

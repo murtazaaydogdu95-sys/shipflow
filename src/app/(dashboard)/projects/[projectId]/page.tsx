@@ -44,6 +44,7 @@ export default async function ProjectBoardPage({
     <KanbanBoard
       initialColumns={columns}
       projectId={projectId}
+      projectName={project.name}
       labels={project.labels}
       techStack={project.techStack}
     />
