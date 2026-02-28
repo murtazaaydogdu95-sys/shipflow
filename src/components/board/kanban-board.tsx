@@ -16,7 +16,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { BoardColumn } from "./board-column";
 import { StoryCard } from "./story-card";
 import { StoryDetailModal } from "@/components/stories/story-detail-modal";
-import { QuickCapture } from "@/components/stories/quick-capture";
+import { useQuickCapture } from "@/components/providers/quick-capture-provider";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -34,8 +34,12 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
   const [activeStory, setActiveStory] = useState<StoryWithRelations | null>(null);
   const [selectedStory, setSelectedStory] = useState<StoryWithRelations | null>(null);
-  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const knownReviewIds = useRef<Set<string>>(new Set());
+  const { openQuickCapture, onStoryCreated } = useQuickCapture();
+
+  // Prevent DndContext hydration mismatch — only mount after client hydration
+  useEffect(() => setMounted(true), []);
 
   // Poll for board updates (agent status changes, review notifications)
   useEffect(() => {
@@ -197,15 +201,22 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
     }
   };
 
-  const handleStoryCreated = (story: StoryWithRelations) => {
-    setColumns((prev) =>
-      prev.map((col) =>
-        col.id === story.status
-          ? { ...col, stories: [...col.stories, story] }
-          : col
-      )
-    );
-    setQuickCaptureOpen(false);
+  const handleStoryDeleted = async (storyId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stories/${storyId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error();
+      setColumns((prev) =>
+        prev.map((col) => ({
+          ...col,
+          stories: col.stories.filter((s) => s.id !== storyId),
+        }))
+      );
+      toast.success("Story deleted");
+    } catch {
+      toast.error("Failed to delete story");
+    }
   };
 
   const handleStoryUpdated = (story: StoryWithRelations) => {
@@ -217,17 +228,18 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
     );
   };
 
-  // Keyboard shortcut for Cmd+K
+  // Register callback so new stories appear on the board immediately
   useEffect(() => {
-    function handleKeydown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setQuickCaptureOpen(true);
-      }
-    }
-    document.addEventListener("keydown", handleKeydown);
-    return () => document.removeEventListener("keydown", handleKeydown);
-  }, []);
+    return onStoryCreated((story) => {
+      setColumns((prev) =>
+        prev.map((col) =>
+          col.id === story.status
+            ? { ...col, stories: [...col.stories, story] }
+            : col
+        )
+      );
+    });
+  }, [onStoryCreated]);
 
   return (
     <div className="flex flex-col h-full">
@@ -235,7 +247,7 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold">Sprint Board</h2>
         </div>
-        <Button size="sm" onClick={() => setQuickCaptureOpen(true)}>
+        <Button size="sm" onClick={openQuickCapture}>
           <Plus className="mr-1 h-4 w-4" />
           Add Story
           <kbd className="ml-2 text-[10px] bg-primary-foreground/20 px-1 rounded hidden sm:inline">
@@ -245,13 +257,39 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
       </div>
 
       <div className="flex-1 overflow-x-auto">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
+        {mounted ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex gap-4 p-4 min-w-max h-full">
+              {STORY_STATUSES.map((status) => {
+                const col = columns.find((c) => c.id === status) || {
+                  id: status,
+                  title: COLUMN_TITLES[status],
+                  stories: [],
+                };
+                return (
+                  <BoardColumn
+                    key={status}
+                    id={status}
+                    title={COLUMN_TITLES[status]}
+                    stories={col.stories}
+                    onStoryClick={setSelectedStory}
+                    onStoryDelete={handleStoryDeleted}
+                  />
+                );
+              })}
+            </div>
+
+            <DragOverlay>
+              {activeStory ? <StoryCard story={activeStory} isDragging /> : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
           <div className="flex gap-4 p-4 min-w-max h-full">
             {STORY_STATUSES.map((status) => {
               const col = columns.find((c) => c.id === status) || {
@@ -260,31 +298,22 @@ export function KanbanBoard({ initialColumns, projectId, labels, techStack }: Ka
                 stories: [],
               };
               return (
-                <BoardColumn
-                  key={status}
-                  id={status}
-                  title={COLUMN_TITLES[status]}
-                  stories={col.stories}
-                  onStoryClick={setSelectedStory}
-                />
+                <div key={status} className="flex flex-col w-72 min-w-[288px] bg-muted/30 rounded-xl">
+                  <div className="flex items-center gap-2 p-3 pb-2">
+                    <h3 className="text-sm font-semibold">{COLUMN_TITLES[status]}</h3>
+                    <span className="ml-auto text-xs text-muted-foreground">{col.stories.length}</span>
+                  </div>
+                  <div className="flex-1 px-2 pb-2 space-y-2 min-h-[100px] p-1">
+                    {col.stories.map((story) => (
+                      <StoryCard key={story.id} story={story} />
+                    ))}
+                  </div>
+                </div>
               );
             })}
           </div>
-
-          <DragOverlay>
-            {activeStory ? <StoryCard story={activeStory} isDragging /> : null}
-          </DragOverlay>
-        </DndContext>
+        )}
       </div>
-
-      <QuickCapture
-        open={quickCaptureOpen}
-        onOpenChange={setQuickCaptureOpen}
-        projectId={projectId}
-        labels={labels}
-        techStack={techStack}
-        onCreated={handleStoryCreated}
-      />
 
       <StoryDetailModal
         story={selectedStory}
