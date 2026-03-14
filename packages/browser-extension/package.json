@@ -1,0 +1,6 @@
+{
+  "name": "@shipflow/browser-extension",
+  "version": "1.0.0",
+  "description": "ShipFlow browser extension for quick story capture",
+  "private": true
+}

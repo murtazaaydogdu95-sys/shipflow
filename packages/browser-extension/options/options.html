@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ShipFlow Settings</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; max-width: 480px; margin: 0 auto; background: #0a0a0a; color: #fafafa; }
+    h1 { font-size: 20px; font-weight: 600; color: #818cf8; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #999; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #333; border-radius: 6px; background: #1a1a1a; color: #fafafa; font-size: 14px; font-family: monospace; }
+    input:focus { outline: none; border-color: #818cf8; }
+    button { padding: 10px 20px; border: none; border-radius: 6px; background: #6366f1; color: white; font-size: 14px; cursor: pointer; margin-right: 8px; }
+    button:hover { background: #4f46e5; }
+    .secondary { background: transparent; border: 1px solid #333; color: #999; }
+    .status { margin-top: 16px; font-size: 13px; padding: 8px 12px; border-radius: 6px; display: none; }
+    .status.success { display: block; background: #065f46; color: #6ee7b7; }
+    .status.error { display: block; background: #7f1d1d; color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <h1>ShipFlow Settings</h1>
+  <div class="field">
+    <label>API URL</label>
+    <input type="url" id="apiUrl" placeholder="http://localhost:3000">
+  </div>
+  <div class="field">
+    <label>API Key</label>
+    <input type="password" id="apiKey" placeholder="Your project API key">
+  </div>
+  <div class="field">
+    <label>Project ID</label>
+    <input type="text" id="projectId" placeholder="Your project ID">
+  </div>
+  <div>
+    <button id="save">Save</button>
+    <button id="test" class="secondary">Test Connection</button>
+  </div>
+  <div id="status" class="status"></div>
+  <script src="options.js"></script>
+</body>
+</html>

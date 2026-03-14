@@ -54,6 +54,8 @@ server.tool(
         status: s.status,
         priority: s.priority,
         storyPoints: s.storyPoints,
+        assigneeId: s.assigneeId,
+        assignee: s.assignee ? (s.assignee as Record<string, unknown>).name : null,
       }));
 
       return {
@@ -223,6 +225,52 @@ server.tool(
     } catch (error) {
       return {
         content: [{ type: "text" as const, text: `Error adding note: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: Get project info
+server.tool(
+  "get_project_info",
+  "Get project details including org info, tech stack, and labels",
+  {},
+  async () => {
+    try {
+      const project = await apiFetch(`/api/projects/${PROJECT_ID}`);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(project, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error fetching project: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// Tool: Add comment to a story
+server.tool(
+  "add_comment",
+  "Add a comment to a story",
+  {
+    storyId: z.string().describe("The story ID"),
+    content: z.string().describe("The comment content"),
+  },
+  async ({ storyId, content }) => {
+    try {
+      await apiFetch(`/api/projects/${PROJECT_ID}/stories/${storyId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      });
+      return {
+        content: [{ type: "text" as const, text: `Comment added to story ${storyId}` }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error adding comment: ${error instanceof Error ? error.message : String(error)}` }],
         isError: true,
       };
     }

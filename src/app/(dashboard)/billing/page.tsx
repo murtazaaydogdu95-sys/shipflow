@@ -1,0 +1,173 @@
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useState } from "react";
+import { PricingCard } from "@/components/billing/pricing-card";
+import { Button } from "@/components/ui/button";
+import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
+import useSWR from "swr";
+import { cn } from "@/lib/utils";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  if (limit === null) {
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between text-sm">
+          <span>{label}</span>
+          <span className="text-muted-foreground">{used} (unlimited)</span>
+        </div>
+        <div className="h-2 bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-green-500 rounded-full" style={{ width: "5%" }} />
+        </div>
+      </div>
+    );
+  }
+  const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-sm">
+        <span>{label}</span>
+        <span className="text-muted-foreground">{used} / {limit}</span>
+      </div>
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all",
+            pct < 70 ? "bg-green-500" : pct < 90 ? "bg-yellow-500" : "bg-red-500"
+          )}
+          style={{ width: `${Math.max(pct, 2)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function BillingPage() {
+  const { data: session } = useSession();
+  const orgId = session?.user?.orgId;
+  const { data: org } = useSWR(orgId ? `/api/orgs/${orgId}` : null, fetcher);
+  const { data: usage } = useSWR(orgId ? `/api/orgs/${orgId}/usage` : null, fetcher);
+  const plan = org?.plan ?? "FREE";
+  const isOwner = org?.role === "OWNER";
+  const [loading, setLoading] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+
+  async function handleUpgrade() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/billing/checkout", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleManage() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleExport() {
+    window.location.href = "/api/account/export";
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold">Billing</h1>
+        <p className="text-muted-foreground mt-1">Manage your subscription and account</p>
+      </div>
+
+      {usage && (
+        <div className="rounded-lg border p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Usage</h2>
+          <div className="space-y-3">
+            <UsageBar label="Projects" used={usage.projects.used} limit={usage.projects.limit} />
+            <UsageBar
+              label={`Stories${usage.stories.note ? ` (${usage.stories.note})` : ""}`}
+              used={usage.stories.used}
+              limit={usage.stories.limit}
+            />
+            <UsageBar
+              label="AI Rewrites (today)"
+              used={usage.aiRewrites.used}
+              limit={usage.aiRewrites.limit}
+            />
+            <div className="flex justify-between text-sm">
+              <span>Team Members</span>
+              <span className="text-muted-foreground">{usage.members.count}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <PricingCard
+          name="Free"
+          price="$0"
+          description="For getting started"
+          features={[
+            "Up to 3 projects",
+            "50 stories per project",
+            "Kanban board",
+            "5 AI rewrites/day",
+          ]}
+          current={plan === "FREE"}
+        />
+        <PricingCard
+          name="Pro"
+          price="$19/mo"
+          description="For serious builders"
+          features={[
+            "Unlimited projects",
+            "Unlimited stories",
+            "50 AI rewrites/day",
+            "Agent auto-assign",
+            "GitHub integration",
+            "Priority support",
+          ]}
+          current={plan === "PRO"}
+          onSelect={isOwner ? handleUpgrade : undefined}
+          loading={loading}
+        />
+      </div>
+
+      {plan === "PRO" && isOwner && (
+        <div>
+          <Button onClick={handleManage} variant="outline" disabled={loading}>
+            Manage Subscription
+          </Button>
+        </div>
+      )}
+
+      {!isOwner && (
+        <p className="text-sm text-muted-foreground">
+          Only organization owners can manage billing. Contact your org owner to make changes.
+        </p>
+      )}
+
+      <div className="border-t pt-8 space-y-4">
+        <h2 className="text-lg font-semibold">Account</h2>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={handleExport}>Export Data</Button>
+          <Button variant="destructive" onClick={() => setShowDelete(true)}>Delete Account</Button>
+        </div>
+      </div>
+
+      <DeleteAccountDialog open={showDelete} onOpenChange={setShowDelete} />
+    </div>
+  );
+}

@@ -5,9 +5,10 @@ interface RewriteOptions {
   provider: string;
   apiKey?: string;
   prompt: string;
+  model?: string;
 }
 
-export async function rewriteWithAI({ provider, apiKey, prompt }: RewriteOptions): Promise<Record<string, unknown>> {
+export async function rewriteWithAI({ provider, apiKey, prompt, model }: RewriteOptions): Promise<Record<string, unknown>> {
   if (provider === "ollama") {
     const ollama = new OpenAI({
       baseURL: process.env.OLLAMA_URL || "http://localhost:11434/v1",
@@ -39,7 +40,7 @@ export async function rewriteWithAI({ provider, apiKey, prompt }: RewriteOptions
   // Default: Anthropic
   const anthropic = new Anthropic({ apiKey });
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: model || "claude-sonnet-4-20250514",
     max_tokens: 1024,
     messages: [{ role: "user", content: prompt }],
   });

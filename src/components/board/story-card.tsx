@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { StoryWithRelations } from "@/types";
-import { Bot, Globe, GripVertical, Trash2 } from "lucide-react";
+import { Bot, Globe, GripVertical, Trash2, Ban, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const priorityColors: Record<string, string> = {
@@ -27,18 +27,26 @@ interface StoryCardProps {
   onClick?: () => void;
   onDelete?: (storyId: string) => void;
   isDragging?: boolean;
+  isSelected?: boolean;
+  isFocused?: boolean;
 }
 
-export function StoryCard({ story, onClick, onDelete, isDragging }: StoryCardProps) {
+export function StoryCard({ story, onClick, onDelete, isDragging, isSelected, isFocused }: StoryCardProps) {
   const completedAC = story.acceptanceCriteria.filter((ac) => ac.completed).length;
   const totalAC = story.acceptanceCriteria.length;
   const storyType = (story as StoryWithRelations & { type?: string }).type;
+  const blockerCount = story.blockedByDeps?.filter((d) => d.blocker.status !== "DONE").length ?? 0;
+  const isBlocked = blockerCount > 0;
+  const childCount = story.children?.length ?? 0;
 
   return (
     <Card
       className={cn(
         "p-3 cursor-pointer hover:border-primary/50 transition-all group relative",
-        isDragging && "opacity-50 rotate-2 shadow-lg"
+        isDragging && "opacity-50 rotate-2 shadow-lg",
+        isSelected && "ring-2 ring-primary",
+        isFocused && "ring-2 ring-primary/50 bg-accent/50",
+        isBlocked && "border-red-500/30 bg-red-500/5"
       )}
       onClick={onClick}
     >
@@ -100,6 +108,18 @@ export function StoryCard({ story, onClick, onDelete, isDragging }: StoryCardPro
                 <span className="text-[9px] font-medium text-green-500">Preview Live</span>
               </span>
             )}
+            {isBlocked && (
+              <span className="inline-flex items-center gap-0.5" title={`Blocked by ${blockerCount} ${blockerCount === 1 ? "story" : "stories"}`}>
+                <Ban className="h-3.5 w-3.5 text-red-500" />
+                <span className="text-[9px] font-medium text-red-500">Blocked</span>
+              </span>
+            )}
+            {childCount > 0 && (
+              <span className="inline-flex items-center gap-0.5" title={`Epic with ${childCount} sub-stories`}>
+                <Link2 className="h-3.5 w-3.5 text-indigo-500" />
+                <span className="text-[9px] font-medium text-indigo-500">{childCount}</span>
+              </span>
+            )}
           </div>
           <p className="text-sm font-medium leading-tight line-clamp-2">{story.title}</p>
 
@@ -121,6 +141,21 @@ export function StoryCard({ story, onClick, onDelete, isDragging }: StoryCardPro
             ))}
             {story.labels.length > 2 && (
               <span className="text-[10px] text-muted-foreground">+{story.labels.length - 2}</span>
+            )}
+            {story.assignee && (
+              <div className="ml-auto" title={story.assignee.name || "Assigned"}>
+                {story.assignee.image ? (
+                  <img
+                    src={story.assignee.image}
+                    alt={story.assignee.name || ""}
+                    className="h-5 w-5 rounded-full ring-1 ring-border"
+                  />
+                ) : (
+                  <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-medium ring-1 ring-border">
+                    {(story.assignee.name?.[0] || "?").toUpperCase()}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

@@ -9,10 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FolderKanban, Zap, Github, Trash2 } from "lucide-react";
+import { Plus, FolderKanban, Zap, Github, Trash2, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import useSWR from "swr";
 import { GitHubImportDialog } from "@/components/projects/github-import-dialog";
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface ProjectsListProps {
   projects: Array<{
@@ -36,6 +40,9 @@ export function ProjectsList({ projects, userId }: ProjectsListProps) {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const router = useRouter();
+  const { data: session } = useSession();
+  const orgId = session?.user?.orgId;
+  const { data: usage } = useSWR(orgId ? `/api/orgs/${orgId}/usage` : null, fetcher);
 
   async function handleDelete(projectId: string, projectName: string) {
     if (!confirm(`Delete "${projectName}"? This cannot be undone.`)) return;
@@ -137,6 +144,24 @@ export function ProjectsList({ projects, userId }: ProjectsListProps) {
         </Dialog>
         </div>
       </div>
+
+      {usage?.aiRewrites && (
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2.5 mb-6 text-sm">
+          <Sparkles className="h-4 w-4 text-primary shrink-0" />
+          <span>
+            <span className="font-medium">AI Rewrites:</span>{" "}
+            {usage.aiRewrites.used}/{usage.aiRewrites.limit ?? "∞"} used today
+          </span>
+          <span className="text-muted-foreground">
+            — {usage.plan === "FREE" ? "Free plan (5/day)" : "Pro plan (50/day)"}
+          </span>
+          {usage.plan === "FREE" && (
+            <a href="/billing" className="ml-auto text-xs text-primary hover:underline">
+              Upgrade for more
+            </a>
+          )}
+        </div>
+      )}
 
       {projects.length === 0 ? (
         <Card className="border-dashed">

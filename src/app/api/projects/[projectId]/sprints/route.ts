@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { createSprintSchema } from "@/lib/validations/sprint";
+import { parseJsonBody } from "@/lib/api-error";
 
 export async function GET(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId } = await params;
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
   const sprints = await prisma.sprint.findMany({
     where: { projectId },
     include: {
@@ -23,12 +23,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId } = await params;
-  const body = await req.json();
-  const data = createSprintSchema.parse(body);
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
+  const parsed = await parseJsonBody(req, 64_000);
+  if (!parsed.ok) return parsed.response;
+  const data = createSprintSchema.parse(parsed.data);
 
   const count = await prisma.sprint.count({ where: { projectId } });
   const sprint = await prisma.sprint.create({

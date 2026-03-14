@@ -33,6 +33,11 @@ export async function GET(req: Request) {
   );
 
   if (ghRes.status === 401 || ghRes.status === 403) {
+    // Clear the stale token so re-auth creates a fresh one
+    await prisma.account.updateMany({
+      where: { userId: session.user.id, provider: "github" },
+      data: { access_token: null },
+    });
     return NextResponse.json(
       { error: "GitHub token expired or missing permissions. Please re-authenticate with GitHub." },
       { status: 403 }

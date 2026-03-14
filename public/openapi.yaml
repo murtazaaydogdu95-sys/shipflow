@@ -1,0 +1,237 @@
+openapi: "3.0.3"
+info:
+  title: ShipFlow API
+  version: "1.0.0"
+  description: |
+    ShipFlow API — AI-powered sprint board that turns your ideas into shipped code.
+
+    Authentication: Use `Authorization: Bearer <api-key>` header or session cookie.
+servers:
+  - url: /api
+    description: API base
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags: [System]
+      security: []
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  timestamp: { type: string }
+        "503":
+          description: Service degraded
+
+  /projects:
+    get:
+      summary: List projects
+      tags: [Projects]
+      responses:
+        "200":
+          description: Array of projects
+    post:
+      summary: Create project
+      tags: [Projects]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+                techStack: { type: string }
+      responses:
+        "200":
+          description: Created project
+
+  /projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get project
+      tags: [Projects]
+      responses:
+        "200":
+          description: Project details
+    patch:
+      summary: Update project
+      tags: [Projects]
+      responses:
+        "200":
+          description: Updated
+    delete:
+      summary: Delete project
+      tags: [Projects]
+      responses:
+        "200":
+          description: Deleted
+
+  /projects/{projectId}/stories:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: List stories
+      tags: [Stories]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [BACKLOG, TODO, IN_PROGRESS, REVIEW, DONE] }
+        - name: sprintId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Array of stories
+    post:
+      summary: Create story
+      tags: [Stories]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string }
+                description: { type: string }
+                priority: { type: string, enum: [CRITICAL, HIGH, MEDIUM, LOW] }
+                status: { type: string }
+                storyPoints: { type: integer }
+                type: { type: string, enum: [feature, bug, chore, refactor, docs, test] }
+      responses:
+        "200":
+          description: Created story
+
+  /projects/{projectId}/stories/{storyId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: storyId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: Get story details
+      tags: [Stories]
+      responses:
+        "200":
+          description: Story with acceptance criteria, labels, activities
+    patch:
+      summary: Update story
+      tags: [Stories]
+      responses:
+        "200":
+          description: Updated story
+    delete:
+      summary: Delete story
+      tags: [Stories]
+      responses:
+        "200":
+          description: Deleted
+
+  /projects/{projectId}/stories/{storyId}/move:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: { type: string }
+      - name: storyId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      summary: Move story (change status/position)
+      tags: [Stories]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, position]
+              properties:
+                status: { type: string, enum: [BACKLOG, TODO, IN_PROGRESS, REVIEW, DONE] }
+                position: { type: integer }
+      responses:
+        "200":
+          description: Moved
+
+  /projects/{projectId}/sprints:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: List sprints
+      tags: [Sprints]
+      responses:
+        "200":
+          description: Array of sprints
+    post:
+      summary: Create sprint
+      tags: [Sprints]
+      responses:
+        "200":
+          description: Created sprint
+
+  /projects/{projectId}/webhooks:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      summary: List webhooks
+      tags: [Webhooks]
+      responses:
+        "200":
+          description: Array of webhooks
+    post:
+      summary: Create webhook
+      tags: [Webhooks]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri }
+                events: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Created webhook with secret
+
+  /notifications:
+    get:
+      summary: List notifications
+      tags: [Notifications]
+      responses:
+        "200":
+          description: Array of notifications
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+security:
+  - BearerAuth: []

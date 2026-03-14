@@ -1,28 +1,30 @@
 import { NextResponse } from "next/server";
-import { authenticateRequest } from "@/lib/api-auth";
+import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { triggerClaudeAgent } from "@/lib/agent-trigger";
+import { sanitizeError, parseJsonBody } from "@/lib/api-error";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ projectId: string; storyId: string }> }
 ) {
-  const authResult = await authenticateRequest(req);
-  if (!authResult) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId, storyId } = await params;
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
 
-  if (authResult.type === "apikey" && authResult.projectId !== projectId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  // Verify story belongs to this project
+  const storyCheck = await prisma.story.findFirst({ where: { id: storyId, projectId }, select: { id: true } });
+  if (!storyCheck) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = await req.json().catch(() => ({}));
+  const parsed = await parseJsonBody(req, 64_000).catch(() => ({ ok: true as const, data: {} }));
+  const body = parsed.ok ? parsed.data as Record<string, unknown> : {};
   const feedback = body?.feedback as string | undefined;
 
   try {
     await triggerClaudeAgent({ storyId, projectId, force: true, feedback });
     return NextResponse.json({ triggered: true, message: "Agent triggered successfully" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ triggered: false, message }, { status: 500 });
+    sanitizeError(error, "Agent trigger failed");
+    return NextResponse.json({ triggered: false, message: "Agent trigger failed" }, { status: 500 });
   }
 }

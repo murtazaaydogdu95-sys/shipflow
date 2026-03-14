@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { startPreview, stopPreview } from "@/lib/preview-manager";
 import { prisma } from "@/lib/prisma";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ projectId: string; storyId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId, storyId } = await params;
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
+
+  // Verify story belongs to this project
+  const storyCheck = await prisma.story.findFirst({ where: { id: storyId, projectId }, select: { id: true } });
+  if (!storyCheck) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
     const { port, pid } = await startPreview(storyId, projectId);
@@ -21,8 +24,8 @@ export async function POST(
     });
     return NextResponse.json({ port, pid, url: `/api/preview/${story!.shortId}` });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to start preview";
-    return NextResponse.json({ error: message }, { status: 500 });
+    sanitizeError(error, "Failed to start preview");
+    return NextResponse.json({ error: "Failed to start preview" }, { status: 500 });
   }
 }
 
@@ -30,17 +33,19 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ projectId: string; storyId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { projectId, storyId } = await params;
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
 
-  const { storyId } = await params;
+  // Verify story belongs to this project
+  const storyCheck = await prisma.story.findFirst({ where: { id: storyId, projectId }, select: { id: true } });
+  if (!storyCheck) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
     await stopPreview(storyId);
     return NextResponse.json({ success: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to stop preview";
-    return NextResponse.json({ error: message }, { status: 500 });
+    sanitizeError(error, "Failed to stop preview");
+    return NextResponse.json({ error: "Failed to stop preview" }, { status: 500 });
   }
 }

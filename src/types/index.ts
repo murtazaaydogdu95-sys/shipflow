@@ -8,11 +8,19 @@ import type {
   Activity,
   StoryLabel,
   ProjectMember,
+  Comment,
 } from "@prisma/client";
 
 export type StoryWithRelations = Story & {
   labels: (StoryLabel & { label: Label })[];
   acceptanceCriteria: AcceptanceCriterion[];
+  assignee?: Pick<User, "id" | "name" | "image"> | null;
+  comments?: (Comment & { user: Pick<User, "id" | "name" | "image"> })[];
+  parent?: Pick<Story, "id" | "shortId" | "title"> | null;
+  children?: Pick<Story, "id" | "shortId" | "title" | "status">[];
+  blockedByDeps?: { blocker: Pick<Story, "id" | "shortId" | "title" | "status"> }[];
+  blockingDeps?: { blocked: Pick<Story, "id" | "shortId" | "title" | "status"> }[];
+  attachments?: { id: string; filename: string; url: string; size: number; mimeType: string; createdAt: Date }[];
 };
 
 export type SprintWithStories = Sprint & {
@@ -36,7 +44,8 @@ export type ActivityWithUser = Activity & {
 };
 
 export const STORY_STATUSES = ["BACKLOG", "TODO", "IN_PROGRESS", "REVIEW", "DONE"] as const;
-export type StoryStatus = (typeof STORY_STATUSES)[number];
+export const ALL_STORY_STATUSES = ["ICEBOX", "BACKLOG", "TODO", "IN_PROGRESS", "REVIEW", "DONE"] as const;
+export type StoryStatus = (typeof ALL_STORY_STATUSES)[number];
 
 export const PRIORITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 export type Priority = (typeof PRIORITIES)[number];
@@ -48,9 +57,21 @@ export const SPRINT_STATUSES = ["PLANNING", "ACTIVE", "COMPLETED"] as const;
 export type SprintStatus = (typeof SPRINT_STATUSES)[number];
 
 export const COLUMN_TITLES: Record<StoryStatus, string> = {
+  ICEBOX: "Someday",
   BACKLOG: "Backlog",
   TODO: "To Do",
   IN_PROGRESS: "In Progress",
   REVIEW: "Review",
   DONE: "Done",
+};
+
+export const FEED_STATUS_ORDER: StoryStatus[] = ["REVIEW", "IN_PROGRESS", "TODO", "BACKLOG", "ICEBOX", "DONE"];
+
+export const FEED_SECTION_TITLES: Record<StoryStatus, string> = {
+  REVIEW: "Needs Review",
+  IN_PROGRESS: "In Progress",
+  TODO: "Up Next",
+  BACKLOG: "Ideas",
+  ICEBOX: "Someday",
+  DONE: "Completed",
 };

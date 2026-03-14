@@ -1,6 +1,29 @@
-import { spawn, execSync } from "child_process";
+import { spawn, execFileSync } from "child_process";
+import fs from "fs";
 import net from "net";
 import { prisma } from "@/lib/prisma";
+
+/**
+ * Poll a port with TCP connect until it accepts connections.
+ * Throws if not ready within timeoutMs.
+ */
+async function waitForPort(port: number, timeoutMs = 30000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const socket = net.createConnection({ port, host: "127.0.0.1" });
+        socket.once("connect", () => { socket.destroy(); resolve(); });
+        socket.once("error", reject);
+        socket.setTimeout(1000, () => { socket.destroy(); reject(new Error("timeout")); });
+      });
+      return; // connected
+    } catch {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  throw new Error(`Dev server not ready on port ${port} after ${timeoutMs}ms`);
+}
 
 /**
  * Find an available port by binding to port 0 and reading the assigned port.
@@ -52,7 +75,7 @@ export async function startPreview(storyId: string, projectId: string): Promise<
 
   // Install deps in case agent added new ones
   try {
-    execSync("npm install --prefer-offline", {
+    execFileSync("npm", ["install", "--prefer-offline"], {
       cwd,
       encoding: "utf-8",
       timeout: 60000,
@@ -62,10 +85,14 @@ export async function startPreview(storyId: string, projectId: string): Promise<
     console.warn("[preview-manager] npm install failed, continuing anyway");
   }
 
-  // Spawn Next.js dev server detached
+  // Open a log file for preview server output
+  const logPath = `/tmp/shipflow-preview-${storyId}.log`;
+  const logFd = fs.openSync(logPath, "a");
+
+  // Spawn Next.js dev server detached, piping stderr/stdout to log file
   const child = spawn("npx", ["next", "dev", "--port", String(port)], {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     cwd,
     env: { ...process.env },
   });
@@ -74,7 +101,29 @@ export async function startPreview(storyId: string, projectId: string): Promise<
 
   const pid = child.pid!;
 
-  // Store preview info on story
+  // Wait for the dev server to actually accept connections
+  try {
+    // Detect early exit: reject if process dies before port is ready
+    let earlyExit = false;
+    child.once("exit", () => { earlyExit = true; });
+
+    await waitForPort(port);
+
+    if (earlyExit) {
+      throw new Error("Dev server process exited before becoming ready");
+    }
+  } catch (err) {
+    // Clean up: kill process group if still alive
+    try { process.kill(-pid, "SIGTERM"); } catch { /* already dead */ }
+    fs.closeSync(logFd);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[preview-manager] failed to start preview for ${storyId}: ${message}`);
+    throw new Error(`Preview server failed to start: ${message}. Check ${logPath} for details.`);
+  }
+
+  fs.closeSync(logFd);
+
+  // Store preview info on story (only after server is confirmed ready)
   await prisma.story.update({
     where: { id: storyId },
     data: { previewPort: port, previewPid: pid },
@@ -112,13 +161,16 @@ export async function stopPreview(storyId: string): Promise<void> {
       process.kill(-story.previewPid, "SIGTERM");
       console.log(`[preview-manager] killed process group ${story.previewPid}`);
     } catch {
-      // Fallback: kill by port
+      // Fallback: kill by port using execFileSync (no shell interpolation)
       if (story.previewPort) {
         try {
-          execSync(`lsof -ti :${story.previewPort} | xargs kill 2>/dev/null`, {
+          const pids = execFileSync("lsof", ["-ti", `:${story.previewPort}`], {
             encoding: "utf-8",
             timeout: 5000,
-          });
+          }).trim();
+          for (const pid of pids.split("\n").filter(Boolean)) {
+            try { process.kill(parseInt(pid, 10), "SIGTERM"); } catch { /* already dead */ }
+          }
           console.log(`[preview-manager] killed processes on port ${story.previewPort}`);
         } catch {
           // Already dead

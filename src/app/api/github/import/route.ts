@@ -2,17 +2,18 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { nanoid } from "nanoid";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { z } from "zod";
+import { sanitizeError, parseJsonBody } from "@/lib/api-error";
 
 const importSchema = z.object({
-  repoFullName: z.string().min(1),
+  repoFullName: z.string().min(1).regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, "Invalid repository name"),
   cloneUrl: z.string().url(),
   htmlUrl: z.string().url(),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).regex(/^[a-zA-Z0-9._-]+$/, "Invalid project name"),
   description: z.string().max(500).optional(),
   language: z.string().max(50).optional(),
 });
@@ -22,8 +23,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const data = importSchema.parse(body);
+  const parsed = await parseJsonBody(req, 64_000);
+  if (!parsed.ok) return parsed.response;
+  const data = importSchema.parse(parsed.data);
 
   const account = await prisma.account.findFirst({
     where: { userId: session.user.id, provider: "github" },
@@ -44,23 +46,34 @@ export async function POST(req: Request) {
   const targetDir = join(baseDir, data.name);
 
   if (existsSync(targetDir)) {
-    return NextResponse.json(
-      { error: "Repository directory already exists. It may have been imported previously." },
-      { status: 409 }
-    );
+    // Check if a project actually exists in the DB for this directory
+    const existingProject = await prisma.project.findFirst({
+      where: { agentWorkingDir: targetDir },
+      select: { id: true },
+    });
+
+    if (existingProject) {
+      return NextResponse.json(
+        { error: "This repository has already been imported as a project." },
+        { status: 409 }
+      );
+    }
+
+    // Orphaned directory — clean it up so we can re-clone
+    rmSync(targetDir, { recursive: true, force: true });
   }
 
   try {
-    // Clone using token-authenticated URL
+    // Clone using token-authenticated URL (execFileSync prevents shell injection)
     const [owner, repo] = data.repoFullName.split("/");
     const authUrl = `https://x-access-token:${account.access_token}@github.com/${owner}/${repo}.git`;
-    execSync(`git clone "${authUrl}" "${targetDir}"`, {
+    execFileSync("git", ["clone", authUrl, targetDir], {
       encoding: "utf-8",
       timeout: 120000,
     });
 
     // Strip token from remote URL
-    execSync(`git remote set-url origin "${data.htmlUrl}.git"`, {
+    execFileSync("git", ["remote", "set-url", "origin", `${data.htmlUrl}.git`], {
       cwd: targetDir,
       encoding: "utf-8",
     });
@@ -69,9 +82,7 @@ export async function POST(req: Request) {
     if (existsSync(targetDir)) {
       rmSync(targetDir, { recursive: true, force: true });
     }
-    const message =
-      error instanceof Error ? error.message : "Git clone failed";
-    console.error("[github-import] clone error:", message);
+    sanitizeError(error, "Git clone failed");
     return NextResponse.json({ error: "Failed to clone repository" }, { status: 500 });
   }
 
@@ -96,6 +107,12 @@ export async function POST(req: Request) {
     { name: "chore", color: "#737373" },
   ];
 
+  // Get user's current org
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { currentOrgId: true },
+  });
+
   const project = await prisma.project.create({
     data: {
       name: data.name,
@@ -105,6 +122,7 @@ export async function POST(req: Request) {
       githubRepo: data.htmlUrl,
       agentWorkingDir: targetDir,
       apiKey: nanoid(32),
+      orgId: user?.currentOrgId || undefined,
       members: {
         create: { userId: session.user.id, role: "OWNER" },
       },

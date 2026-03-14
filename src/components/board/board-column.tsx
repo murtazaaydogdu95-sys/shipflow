@@ -17,6 +17,7 @@ interface BoardColumnProps {
 }
 
 const columnColors: Record<string, string> = {
+  ICEBOX: "bg-slate-400",
   BACKLOG: "bg-gray-500",
   TODO: "bg-blue-500",
   IN_PROGRESS: "bg-yellow-500",

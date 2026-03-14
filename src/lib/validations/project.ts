@@ -8,11 +8,16 @@ export const createProjectSchema = z.object({
 });
 
 export const updateProjectSchema = createProjectSchema.partial().extend({
+  isPublic: z.boolean().optional(),
   agentAutoAssign: z.boolean().optional(),
   agentMinPriority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
   agentWorkingDir: z.string().optional().nullable(),
   aiProvider: z.enum(["anthropic", "openai", "ollama"]).optional(),
   aiApiKey: z.string().max(200).optional().nullable(),
+  maxConcurrentAgents: z.number().int().min(1).max(3).optional(),
+  deployProvider: z.enum(["vercel", "railway", "fly", "custom"]).optional().nullable(),
+  deployToken: z.string().max(500).optional().nullable(),
+  deployProjectId: z.string().max(200).optional().nullable(),
 });
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;

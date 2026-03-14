@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ShipFlow</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>ShipFlow</h1>
+    <div id="status" class="status"></div>
+    <form id="capture-form">
+      <input type="text" id="title" placeholder="Story title" required>
+      <textarea id="description" placeholder="Description (optional)" rows="3"></textarea>
+      <div class="row">
+        <select id="priority">
+          <option value="LOW">Low</option>
+          <option value="MEDIUM" selected>Medium</option>
+          <option value="HIGH">High</option>
+          <option value="CRITICAL">Critical</option>
+        </select>
+        <select id="type">
+          <option value="feature">Feature</option>
+          <option value="bug">Bug</option>
+          <option value="chore">Chore</option>
+          <option value="refactor">Refactor</option>
+        </select>
+      </div>
+      <button type="submit" id="submit-btn">Create Story</button>
+    </form>
+    <div id="screenshot-preview" class="preview hidden"></div>
+    <button id="screenshot-btn" class="secondary">Capture Screenshot</button>
+    <a href="#" id="settings-link">Settings</a>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

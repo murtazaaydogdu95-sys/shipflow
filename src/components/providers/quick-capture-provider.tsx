@@ -9,10 +9,12 @@ import {
   useRef,
 } from "react";
 import { QuickCapture } from "@/components/stories/quick-capture";
+import { CommandPalette } from "@/components/layout/command-palette";
 import type { StoryWithRelations } from "@/types";
 
 interface QuickCaptureContextValue {
   openQuickCapture: () => void;
+  openCommandPalette: () => void;
   onStoryCreated: (cb: (story: StoryWithRelations) => void) => () => void;
 }
 
@@ -30,7 +32,8 @@ interface QuickCaptureProviderProps {
 }
 
 export function QuickCaptureProvider({ projectId, children }: QuickCaptureProviderProps) {
-  const [open, setOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [labels, setLabels] = useState<Array<{ id: string; name: string; color: string }>>([]);
   const [techStack, setTechStack] = useState<string | null>(null);
   const [fetched, setFetched] = useState(false);
@@ -38,7 +41,7 @@ export function QuickCaptureProvider({ projectId, children }: QuickCaptureProvid
 
   // Fetch project data (labels + techStack) once when modal first opens
   useEffect(() => {
-    if (!open || fetched) return;
+    if (!captureOpen || fetched) return;
     (async () => {
       try {
         const res = await fetch(`/api/projects/${projectId}`);
@@ -51,21 +54,22 @@ export function QuickCaptureProvider({ projectId, children }: QuickCaptureProvid
         // silently fail — QuickCapture still works without labels
       }
     })();
-  }, [open, fetched, projectId]);
+  }, [captureOpen, fetched, projectId]);
 
-  // Global Cmd+K keyboard shortcut
+  // Global Cmd+K keyboard shortcut opens command palette
   useEffect(() => {
     function handleKeydown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen(true);
+        setPaletteOpen(true);
       }
     }
     document.addEventListener("keydown", handleKeydown);
     return () => document.removeEventListener("keydown", handleKeydown);
   }, []);
 
-  const openQuickCapture = useCallback(() => setOpen(true), []);
+  const openQuickCapture = useCallback(() => setCaptureOpen(true), []);
+  const openCommandPalette = useCallback(() => setPaletteOpen(true), []);
 
   const onStoryCreated = useCallback((cb: (story: StoryWithRelations) => void) => {
     listenersRef.current.add(cb);
@@ -75,22 +79,33 @@ export function QuickCaptureProvider({ projectId, children }: QuickCaptureProvid
   }, []);
 
   const handleCreated = useCallback((story: StoryWithRelations) => {
-    setOpen(false);
+    setCaptureOpen(false);
     for (const cb of listenersRef.current) {
       cb(story);
     }
   }, []);
 
+  const handleCreateFromPalette = useCallback(() => {
+    setPaletteOpen(false);
+    setCaptureOpen(true);
+  }, []);
+
   return (
-    <QuickCaptureContext.Provider value={{ openQuickCapture, onStoryCreated }}>
+    <QuickCaptureContext.Provider value={{ openQuickCapture, openCommandPalette, onStoryCreated }}>
       {children}
       <QuickCapture
-        open={open}
-        onOpenChange={setOpen}
+        open={captureOpen}
+        onOpenChange={setCaptureOpen}
         projectId={projectId}
         labels={labels}
         techStack={techStack}
         onCreated={handleCreated}
+      />
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onCreateStory={handleCreateFromPalette}
+        projectId={projectId}
       />
     </QuickCaptureContext.Provider>
   );

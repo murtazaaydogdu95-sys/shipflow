@@ -1,33 +1,52 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { execFileSync } from "child_process";
+import { readFileSync } from "fs";
+import path from "path";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteStorySchema } from "@/lib/validations/story";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
+import { checkRewriteLimit } from "@/lib/plan-limits";
+import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
+import { parseJsonBody } from "@/lib/api-error";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId } = await params;
-  const body = await req.json();
-  const { rawInput, techStack } = rewriteStorySchema.parse(body);
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
 
-  const project = await prisma.project.findFirst({
-    where: {
-      id: projectId,
-      members: { some: { userId: session.user.id } },
-    },
-    select: { aiProvider: true, aiApiKey: true },
+  const parsed = await parseJsonBody(req, 64_000);
+  if (!parsed.ok) return parsed.response;
+  const { rawInput, techStack } = rewriteStorySchema.parse(parsed.data);
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { aiProvider: true, aiApiKey: true, orgId: true, agentWorkingDir: true, techStack: true },
   });
 
   if (!project)
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
-  const provider = project.aiProvider || "anthropic";
+  const provider = project.aiProvider || "ollama";
+  const hasByok = !!(project.aiApiKey && provider !== "ollama");
+
+  // Check rewrite limits (BYOK users bypass)
+  const userId = access.type === "session" ? access.userId : "";
+  const limitCheck = await checkRewriteLimit(projectId, userId, hasByok);
+  if (!limitCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: limitCheck.message,
+        _rewriteUsage: { used: limitCheck.used, limit: limitCheck.limit, remaining: 0 },
+      },
+      { status: 429 }
+    );
+  }
+
+  // Resolve API key
   const apiKey =
     provider === "ollama"
       ? undefined
@@ -41,9 +60,47 @@ export async function POST(
     );
   }
 
+  // Select model: BYOK gets Sonnet, platform key uses plan-based model
+  let model: string | undefined;
+  if (provider === "anthropic" && !project.aiApiKey) {
+    // Using platform key — select model based on plan
+    const org = project.orgId
+      ? await prisma.organization.findUnique({
+          where: { id: project.orgId },
+          select: { plan: true },
+        })
+      : null;
+    const plan = (org?.plan ?? "FREE") as keyof typeof PLAN_LIMITS;
+    model = PLAN_LIMITS[plan]?.aiModel ?? PLAN_LIMITS.FREE.aiModel;
+  }
+
+  // Gather codebase context if working directory is available
+  let codebaseContext = "";
+  if (project.agentWorkingDir) {
+    try {
+      const tree = execFileSync(
+        "find", [".", "-type", "f", "(", "-name", "*.ts", "-o", "-name", "*.tsx", "-o", "-name", "*.js", "-o", "-name", "*.jsx", ")", "-not", "-path", "*/node_modules/*", "-not", "-path", "*/.next/*"],
+        { cwd: project.agentWorkingDir, encoding: "utf-8", timeout: 5000 }
+      ).split("\n").filter(Boolean).slice(0, 80).join("\n");
+
+      let deps = "";
+      try {
+        const pkgJson = readFileSync(path.join(project.agentWorkingDir, "package.json"), "utf-8");
+        const pkg = JSON.parse(pkgJson);
+        deps = Object.keys(pkg.dependencies || {}).join(", ");
+      } catch { /* no package.json */ }
+
+      if (tree || deps) {
+        codebaseContext = `\n\nCodebase context (reference actual files and patterns in the story):`;
+        if (tree) codebaseContext += `\nFile structure:\n${tree}`;
+        if (deps) codebaseContext += `\nDependencies: ${deps}`;
+      }
+    } catch { /* ignore errors */ }
+  }
+
   const prompt = `You are an expert agile product manager AI. Transform this rough feature idea into a structured user story.
 
-${techStack ? `Tech Stack: ${techStack}` : ""}
+${techStack || project.techStack ? `Tech Stack: ${techStack || project.techStack}` : ""}${codebaseContext}
 Feature idea: "${rawInput}"
 
 Respond in this exact JSON format (no markdown, no code fences, just JSON):
@@ -66,8 +123,27 @@ Rules:
 - Keep language concise and developer-focused`;
 
   try {
-    const result = await rewriteWithAI({ provider, apiKey, prompt });
-    return NextResponse.json(result);
+    const result = await rewriteWithAI({ provider, apiKey, prompt, model });
+
+    // Record activity for usage tracking
+    await prisma.activity.create({
+      data: {
+        type: "STORY_REWRITTEN",
+        projectId,
+        userId: access.type === "session" ? access.userId : null,
+        message: `AI rewrite: "${rawInput.slice(0, 60)}${rawInput.length > 60 ? "..." : ""}"`,
+      },
+    });
+
+    const newUsed = limitCheck.used + 1;
+    return NextResponse.json({
+      ...result,
+      _rewriteUsage: {
+        used: newUsed,
+        limit: hasByok ? null : limitCheck.limit,
+        remaining: hasByok ? null : Math.max(0, limitCheck.limit - newUsed),
+      },
+    });
   } catch (error) {
     console.error("AI rewrite error:", error);
     return NextResponse.json(

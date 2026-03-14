@@ -1,4 +1,3 @@
-import { Sidebar } from "@/components/layout/sidebar";
 import { QuickCaptureProvider } from "@/components/providers/quick-capture-provider";
 
 export default async function ProjectLayout({
@@ -11,11 +10,8 @@ export default async function ProjectLayout({
   const { projectId } = await params;
 
   return (
-    <>
-      <Sidebar projectId={projectId} />
-      <QuickCaptureProvider projectId={projectId}>
-        <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
-      </QuickCaptureProvider>
-    </>
+    <QuickCaptureProvider projectId={projectId}>
+      <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
+    </QuickCaptureProvider>
   );
 }

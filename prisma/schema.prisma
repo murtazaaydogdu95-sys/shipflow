@@ -11,17 +11,40 @@ datasource db {
 // ─── NextAuth Models ─────────────────────────────────────
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  projects      ProjectMember[]
-  activities    Activity[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String        @id @default(cuid())
+  name             String?
+  email            String?       @unique
+  emailVerified    DateTime?
+  image            String?
+  plan             String        @default("FREE")
+  lemonSqueezyCustomerId String?  @unique
+  currentOrgId     String?
+  deletedAt        DateTime?
+  onboardingCompleted Boolean       @default(false)
+  notificationPrefs    String?       // JSON: { email: boolean, inApp: boolean, digest: "instant"|"daily"|"off" }
+  emailUnsubscribeToken String?     @unique
+  accounts         Account[]
+  sessions         Session[]
+  projects         ProjectMember[]
+  orgMemberships   OrgMember[]
+  activities       Activity[]
+  assignedStories  Story[]        @relation("AssignedStories")
+  comments         Comment[]
+  notifications    Notification[]
+  passwordHash        String?
+  passwordResetToken  String?       @unique
+  passwordResetExpiry DateTime?
+  isAdmin             Boolean       @default(false)
+  totpSecret          String?
+  totpEnabled         Boolean       @default(false)
+  totpBackupCodes     String?
+  auditLogs        AuditLog[]     @relation("AuditLogs")
+  subscription     Subscription?
+  currentOrg       Organization? @relation("UserCurrentOrg", fields: [currentOrgId], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([currentOrgId])
 }
 
 model Account {
@@ -58,6 +81,53 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model Subscription {
+  id                     String        @id @default(cuid())
+  userId                 String?       @unique
+  orgId                  String?       @unique
+  externalSubscriptionId String        @unique
+  productId              String
+  currentPeriodEnd       DateTime
+  status                 String
+  user                   User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization           Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+}
+
+// ─── Organization Models ────────────────────────────────
+
+model Organization {
+  id               String        @id @default(cuid())
+  name             String
+  slug             String        @unique
+  plan             String        @default("FREE")
+  lemonSqueezyCustomerId String?  @unique
+  isPersonal       Boolean       @default(false)
+  members          OrgMember[]
+  projects         Project[]
+  invites          OrgInvite[]
+  auditLogs        AuditLog[]
+  subscription     Subscription?
+  usersWithCurrent User[]        @relation("UserCurrentOrg")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model OrgMember {
+  id        String       @id @default(cuid())
+  userId    String
+  orgId     String
+  role      String       @default("MEMBER")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, orgId])
+  @@index([userId])
+  @@index([orgId])
+}
+
 // ─── Application Models ──────────────────────────────────
 
 model Project {
@@ -67,20 +137,34 @@ model Project {
   description   String?
   techStack     String?
   githubRepo    String?
+  orgId            String?
   webhookSecret    String?
   apiKey           String?         @unique
+  apiKeyHash       String?
+  apiKeyPrefix     String?
+  apiKeyLastRotated DateTime?
+  isPublic         Boolean         @default(false)
   agentAutoAssign  Boolean         @default(false)
   agentMinPriority String          @default("HIGH")
   agentWorkingDir  String?
-  aiProvider       String          @default("anthropic")
+  aiProvider       String          @default("ollama")
   aiApiKey         String?
+  maxConcurrentAgents Int          @default(1)
+  deployProvider   String?
+  deployToken      String?
+  deployProjectId  String?
+  org              Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   members          ProjectMember[]
   stories       Story[]
   sprints       Sprint[]
   labels        Label[]
   activities    Activity[]
+  webhooks      Webhook[]
+  recurringStories RecurringStory[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+
+  @@index([orgId])
 }
 
 model ProjectMember {
@@ -93,6 +177,7 @@ model ProjectMember {
   createdAt DateTime    @default(now())
 
   @@unique([userId, projectId])
+  @@index([userId])
 }
 
 model Story {
@@ -109,6 +194,8 @@ model Story {
   position           Int                  @default(0)
   projectId          String
   sprintId           String?
+  assigneeId         String?
+  parentId           String?
   assignedToAgent    Boolean              @default(false)
   agentNotes         String?
   agentStatus        String?
@@ -118,16 +205,31 @@ model Story {
   branchName         String?
   previewPort        Int?
   previewPid         Int?
+  aiReviewScore      Int?
+  aiReviewResult     String?
+  aiReviewedAt       DateTime?
+  deployStatus       String?
+  deployUrl          String?
+  deployedAt         DateTime?
   project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sprint             Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  assignee           User?                @relation("AssignedStories", fields: [assigneeId], references: [id], onDelete: SetNull)
+  parent             Story?               @relation("StoryParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children           Story[]              @relation("StoryParent")
+  blockedByDeps      StoryDependency[]    @relation("BlockedStory")
+  blockingDeps       StoryDependency[]    @relation("BlockerStory")
   labels             StoryLabel[]
   acceptanceCriteria AcceptanceCriterion[]
+  attachments        Attachment[]
+  comments           Comment[]
   activities         Activity[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
   @@index([projectId, status])
   @@index([sprintId])
+  @@index([parentId])
+  @@index([assigneeId])
 }
 
 model AcceptanceCriterion {
@@ -139,6 +241,8 @@ model AcceptanceCriterion {
   position  Int     @default(0)
   storyId   String
   story     Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
 }
 
 model Sprint {
@@ -186,11 +290,172 @@ model Activity {
   userId    String?
   projectId String
   storyId   String?
+  orgId     String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   story     Story?   @relation(fields: [storyId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 
-  @@index([projectId])
+  @@index([projectId, createdAt])
   @@index([storyId])
+  @@index([orgId, createdAt])
+  @@index([userId])
+}
+
+// ─── Comment Model ─────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  userId    String
+  storyId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storyId, createdAt])
+  @@index([userId])
+}
+
+// ─── Notification Model ────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  href      String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+// ─── Org Invite Model ──────────────────────────────────
+
+model OrgInvite {
+  id        String       @id @default(cuid())
+  email     String
+  orgId     String
+  role      String       @default("MEMBER")
+  token     String       @unique
+  expiresAt DateTime
+  invitedBy String
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([email, orgId])
+  @@index([token])
+  @@index([orgId])
+}
+
+// ─── Audit Log Model ──────────────────────────────────
+
+model AuditLog {
+  id        String       @id @default(cuid())
+  action    String
+  details   String?
+  userId    String
+  orgId     String
+  user      User         @relation("AuditLogs", fields: [userId], references: [id], onDelete: Cascade)
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  createdAt DateTime     @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([userId])
+}
+
+// ─── Webhook Model ──────────────────────────────────
+
+model Webhook {
+  id         String            @id @default(cuid())
+  url        String
+  events     String            // JSON array of event names
+  secret     String
+  active     Boolean           @default(true)
+  projectId  String
+  project    Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([projectId])
+}
+
+model WebhookDelivery {
+  id            String    @id @default(cuid())
+  webhookId     String
+  event         String
+  payload       String    // JSON body
+  status        String    @default("PENDING") // PENDING | SUCCESS | FAILED
+  httpStatus    Int?
+  responseBody  String?   // truncated 1KB
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(5)
+  nextRetryAt   DateTime?
+  lastAttemptAt DateTime?
+  errorMessage  String?
+  webhook       Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+
+  @@index([webhookId])
+  @@index([status, nextRetryAt])
+  @@index([createdAt])
+}
+
+// ─── Story Dependency Model ──────────────────────────────
+
+model StoryDependency {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  blocker   Story    @relation("BlockerStory", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   Story    @relation("BlockedStory", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@index([blockerId])
+}
+
+// ─── Attachment Model ──────────────────────────────
+
+model Attachment {
+  id        String   @id @default(cuid())
+  filename  String
+  url       String
+  size      Int
+  mimeType  String
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([storyId])
+}
+
+// ─── Recurring Story Model ──────────────────────────────
+
+model RecurringStory {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  type          String    @default("chore")
+  priority      String    @default("MEDIUM")
+  storyPoints   Int?
+  frequency     String    // daily | weekly | monthly
+  dayOfWeek     Int?      // 0-6 for weekly
+  dayOfMonth    Int?      // 1-31 for monthly
+  lastCreatedAt DateTime?
+  active        Boolean   @default(true)
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([projectId])
 }

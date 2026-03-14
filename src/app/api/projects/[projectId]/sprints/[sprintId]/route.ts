@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { updateSprintSchema } from "@/lib/validations/sprint";
+import { parseJsonBody } from "@/lib/api-error";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ projectId: string; sprintId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId, sprintId } = await params;
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
   const sprint = await prisma.sprint.findFirst({
     where: { id: sprintId, projectId },
     include: {
@@ -32,15 +32,31 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ projectId: string; sprintId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId, sprintId } = await params;
-  const body = await req.json();
-  const data = updateSprintSchema.parse(body);
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
+  const parsed = await parseJsonBody(req, 64_000);
+  if (!parsed.ok) return parsed.response;
+  const data = updateSprintSchema.parse(parsed.data);
 
   const sprint = await prisma.sprint.findFirst({ where: { id: sprintId, projectId } });
   if (!sprint) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Validate sprint status transitions: PLANNING → ACTIVE → COMPLETED (no skipping, no going back)
+  if (data.status && data.status !== sprint.status) {
+    const VALID_SPRINT_TRANSITIONS: Record<string, string[]> = {
+      PLANNING: ["ACTIVE"],
+      ACTIVE: ["COMPLETED"],
+      COMPLETED: [],
+    };
+    const allowed = VALID_SPRINT_TRANSITIONS[sprint.status] || [];
+    if (!allowed.includes(data.status)) {
+      return NextResponse.json(
+        { error: `Invalid sprint transition from ${sprint.status} to ${data.status}`, validTransitions: allowed },
+        { status: 422 }
+      );
+    }
+  }
 
   // Handle status transitions
   if (data.status === "ACTIVE" && sprint.status === "PLANNING") {
@@ -68,7 +84,7 @@ export async function PATCH(
         type: "SPRINT_COMPLETED",
         message: `Sprint "${sprint.name}" completed`,
         projectId,
-        userId: session.user.id,
+        userId: access.type === "session" ? access.userId : null,
       },
     });
   }
@@ -91,10 +107,9 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ projectId: string; sprintId: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { projectId, sprintId } = await params;
+  const access = await requireProjectAccess(req, projectId);
+  if (!access) return unauthorizedResponse();
 
   // Unassign stories from this sprint
   await prisma.story.updateMany({

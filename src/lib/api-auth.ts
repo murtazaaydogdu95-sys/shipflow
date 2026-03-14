@@ -1,5 +1,11 @@
+import { NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+
+export function hashApiKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
 
 export async function getSession() {
   return await auth();
@@ -17,7 +23,14 @@ export async function authenticateApiKey(req: Request) {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
   const apiKey = authHeader.slice(7);
-  const project = await prisma.project.findUnique({ where: { apiKey } });
+
+  // Try hashed lookup first
+  const hash = hashApiKey(apiKey);
+  let project = await prisma.project.findFirst({ where: { apiKeyHash: hash } });
+  if (project) return project;
+
+  // Fallback: plaintext lookup (backward compat during transition)
+  project = await prisma.project.findUnique({ where: { apiKey } });
   return project;
 }
 
@@ -40,4 +53,54 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
   }
 
   return null;
+}
+
+type ProjectAccessResult =
+  | { type: "session"; userId: string; role: string }
+  | { type: "apikey"; projectId: string; role: string }
+  | null;
+
+/**
+ * Verify the authenticated user has access to a specific project.
+ * For session auth: checks ProjectMember exists (and optional role).
+ * For API key auth: checks key belongs to the project.
+ * Returns auth result with role, or null if denied.
+ */
+export async function requireProjectAccess(
+  req: Request,
+  projectId: string,
+  options?: { roles?: string[] }
+): Promise<ProjectAccessResult> {
+  const authResult = await authenticateRequest(req);
+  if (!authResult) return null;
+
+  if (authResult.type === "apikey") {
+    if (authResult.projectId !== projectId) return null;
+    return { type: "apikey", projectId: authResult.projectId, role: "OWNER" };
+  }
+
+  // Session auth: check ProjectMember
+  const member = await prisma.projectMember.findUnique({
+    where: { userId_projectId: { userId: authResult.userId, projectId } },
+    select: { role: true },
+  });
+
+  if (!member) return null;
+
+  if (options?.roles && !options.roles.includes(member.role)) {
+    return null;
+  }
+
+  return { type: "session", userId: authResult.userId, role: member.role };
+}
+
+/**
+ * Helper to return a 401/403 response for project access failures.
+ */
+export function forbiddenResponse(message = "Forbidden") {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
+
+export function unauthorizedResponse(message = "Unauthorized") {
+  return NextResponse.json({ error: message }, { status: 401 });
 }

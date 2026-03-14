@@ -1,9 +1,10 @@
-import { spawn } from "child_process";
-import { execSync } from "child_process";
+import { spawn, execSync, execFileSync } from "child_process";
 import { writeFileSync, openSync, appendFileSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+
+export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 const PRIORITY_ORDER: Record<string, number> = {
   CRITICAL: 0,
@@ -61,20 +62,73 @@ interface TriggerOptions {
 }
 
 /**
- * Check if an agent is busy or a story is awaiting review approval.
- * Queue is blocked while any story is RUNNING, QUEUED, or sitting in REVIEW.
+ * Check if agent slots are available for this project.
+ * Counts active agents (RUNNING + QUEUED) and compares to maxConcurrentAgents.
+ * REVIEW stories no longer block the queue.
  */
 async function isQueueBlocked(projectId: string): Promise<boolean> {
-  const blocked = await prisma.story.findFirst({
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { maxConcurrentAgents: true },
+  });
+  const maxAgents = project?.maxConcurrentAgents ?? 1;
+
+  const activeCount = await prisma.story.count({
     where: {
       projectId,
-      OR: [
-        { agentStatus: { in: ["RUNNING", "QUEUED"] } },
-        { status: "REVIEW", agentStatus: "COMPLETED" },
-      ],
+      agentStatus: { in: ["RUNNING", "QUEUED"] },
     },
   });
-  return !!blocked;
+  return activeCount >= maxAgents;
+}
+
+/**
+ * Atomically claim an agent slot by setting agentStatus to QUEUED only if
+ * the current active agent count is below maxConcurrentAgents.
+ * Returns true if the slot was successfully claimed, false otherwise.
+ * This prevents the race condition where two concurrent requests both pass
+ * isQueueBlocked() and exceed the limit.
+ */
+async function claimAgentSlot(storyId: string, projectId: string): Promise<boolean> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { maxConcurrentAgents: true },
+  });
+  const maxAgents = project?.maxConcurrentAgents ?? 1;
+
+  // Use a serializable transaction to atomically check count + claim slot
+  try {
+    await prisma.$transaction(async (tx) => {
+      const activeCount = await tx.story.count({
+        where: {
+          projectId,
+          agentStatus: { in: ["RUNNING", "QUEUED"] },
+        },
+      });
+
+      if (activeCount >= maxAgents) {
+        throw new Error("SLOT_FULL");
+      }
+
+      await tx.story.update({
+        where: { id: storyId },
+        data: {
+          agentStatus: "QUEUED",
+          assignedToAgent: true,
+          agentTriggeredAt: new Date(),
+        },
+      });
+    }, { isolationLevel: "Serializable" });
+
+    return true;
+  } catch (err) {
+    if (err instanceof Error && err.message === "SLOT_FULL") {
+      return false;
+    }
+    // Serialization failure (concurrent transaction) — treat as slot full
+    console.warn(`[agent-trigger] claimAgentSlot: transaction conflict for ${storyId}, treating as slot full`);
+    return false;
+  }
 }
 
 /**
@@ -90,18 +144,32 @@ async function findNextStory(projectId: string) {
     },
     include: {
       acceptanceCriteria: { orderBy: { position: "asc" } },
+      blockedByDeps: {
+        include: { blocker: { select: { status: true } } },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
 
   if (stories.length === 0) return null;
 
+  // Filter out blocked stories (stories with unresolved blockers)
+  const unblocked = stories.filter((s) => {
+    if (!s.blockedByDeps || s.blockedByDeps.length === 0) return true;
+    return s.blockedByDeps.every((dep) => dep.blocker.status === "DONE");
+  });
+
+  if (unblocked.length === 0) {
+    console.log(`[agent-trigger] findNextStory: all eligible stories are blocked`);
+    return null;
+  }
+
   // Sort by priority (CRITICAL first), then by creation date
-  stories.sort(
+  unblocked.sort(
     (a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3)
   );
 
-  return stories[0];
+  return unblocked[0];
 }
 
 /**
@@ -132,9 +200,8 @@ export async function processNextStory(projectId: string) {
     return;
   }
 
-  // Only one agent at a time — also wait for REVIEW approval before starting next
   if (await isQueueBlocked(projectId)) {
-    console.log(`[agent-trigger] processNextStory: queue blocked (agent running or story in review)`);
+    console.log(`[agent-trigger] processNextStory: all agent slots full`);
     return;
   }
 
@@ -163,6 +230,12 @@ export async function processNextStory(projectId: string) {
   }
 
   await spawnAgent({ storyId: story.id, projectId });
+
+  // Check if more agent slots are available and fill them
+  if (!(await isQueueBlocked(projectId))) {
+    // Small delay to prevent tight loops
+    setTimeout(() => processNextStory(projectId).catch(console.error), 1000);
+  }
 }
 
 /**
@@ -213,7 +286,7 @@ async function ensureBranch(story: { id: string; shortId: string; title: string;
   if (story.branchName) {
     // Re-trigger: checkout existing branch
     try {
-      execSync(`git checkout ${story.branchName}`, opts);
+      execFileSync("git", ["checkout", story.branchName], opts);
     } catch {
       // Branch might already be checked out
     }
@@ -231,14 +304,14 @@ async function ensureBranch(story: { id: string; shortId: string; title: string;
   const branchName = `${prefix}/${story.shortId}-${slug}`;
 
   try {
-    execSync("git checkout main", opts);
-    execSync("git pull origin main", opts);
+    execFileSync("git", ["checkout", "main"], opts);
+    execFileSync("git", ["pull", "origin", "main"], opts);
   } catch {
     // If pull fails (no remote, etc.), just stay on main
     console.warn("[agent-trigger] git pull failed, continuing on current main");
   }
 
-  execSync(`git checkout -b ${branchName}`, opts);
+  execFileSync("git", ["checkout", "-b", branchName], opts);
 
   // Store branch name on story
   await prisma.story.update({
@@ -268,18 +341,15 @@ async function spawnAgent({ storyId, projectId, feedback }: { storyId: string; p
 
   if (!story) return;
 
+  // Atomically claim an agent slot before doing any work
+  const claimed = await claimAgentSlot(storyId, projectId);
+  if (!claimed) {
+    console.log(`[agent-trigger] spawnAgent: no agent slot available for ${story.shortId}`);
+    return;
+  }
+
   // Create or checkout feature branch
   const branchName = await ensureBranch(story, project.agentWorkingDir);
-
-  // Mark as QUEUED
-  await prisma.story.update({
-    where: { id: storyId },
-    data: {
-      agentStatus: "QUEUED",
-      assignedToAgent: true,
-      agentTriggeredAt: new Date(),
-    },
-  });
 
   // Build MCP config
   const configPath = `/tmp/shipflow-mcp-${storyId}.json`;
@@ -379,6 +449,23 @@ async function spawnAgent({ storyId, projectId, feedback }: { storyId: string; p
         if (latest && latest.status === "REVIEW" && latest.agentStatus === "COMPLETED") {
           const { startPreview } = await import("@/lib/preview-manager");
           await startPreview(storyId, projectId);
+
+          // Auto-trigger AI code review
+          try {
+            const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+            const proj = await prisma.project.findUnique({
+              where: { id: projectId },
+              select: { apiKey: true },
+            });
+            if (proj?.apiKey) {
+              fetch(`${baseUrl}/api/projects/${projectId}/stories/${storyId}/review`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${proj.apiKey}` },
+              }).catch(console.error);
+            }
+          } catch (reviewErr) {
+            console.error(`[agent-trigger] auto-review failed for ${storyId}:`, reviewErr);
+          }
         }
       } catch (err) {
         console.error(`[agent-trigger] failed to start preview for ${storyId}:`, err);

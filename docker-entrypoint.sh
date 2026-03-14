@@ -22,11 +22,5 @@ echo "PostgreSQL is ready!"
 echo "Running prisma db push..."
 npx prisma db push --skip-generate
 
-# Conditionally seed
-if [ "$SEED_DATABASE" = "true" ]; then
-  echo "Seeding database..."
-  npx tsx prisma/seed.ts
-fi
-
 echo "Starting ShipFlow..."
 exec node server.js

@@ -1,15 +1,19 @@
 import { z } from "zod";
 
+const storyStatusEnum = z.enum(["ICEBOX", "BACKLOG", "TODO", "IN_PROGRESS", "REVIEW", "DONE"]);
+
 export const createStorySchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
   rawInput: z.string().optional(),
   userStory: z.string().optional(),
-  status: z.enum(["BACKLOG", "TODO", "IN_PROGRESS", "REVIEW", "DONE"]).optional(),
+  status: storyStatusEnum.optional(),
   priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
   type: z.enum(["feature", "bug", "chore", "refactor", "docs", "test"]).optional(),
   storyPoints: z.number().int().min(0).max(100).optional().nullable(),
   sprintId: z.string().optional().nullable(),
+  assigneeId: z.string().optional().nullable(),
+  parentId: z.string().optional().nullable(),
   labelIds: z.array(z.string()).optional(),
   acceptanceCriteria: z
     .array(
@@ -27,13 +31,13 @@ export const updateStorySchema = createStorySchema.partial().extend({
   agentNotes: z.string().optional().nullable(),
   assignedToAgent: z.boolean().optional(),
   commitHash: z.string().optional().nullable(),
-  branchName: z.string().optional().nullable(),
-  previewPort: z.number().int().optional().nullable(),
-  previewPid: z.number().int().optional().nullable(),
+  branchName: z.string().regex(/^[a-zA-Z0-9\/_.\-]+$/, "Invalid branch name characters").optional().nullable(),
+  // previewPort and previewPid are intentionally excluded — they are set only
+  // by the preview-manager internally, never by external API callers.
 });
 
 export const moveStorySchema = z.object({
-  status: z.enum(["BACKLOG", "TODO", "IN_PROGRESS", "REVIEW", "DONE"]),
+  status: storyStatusEnum,
   position: z.number().int().min(0),
 });
 

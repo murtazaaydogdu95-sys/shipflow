@@ -19,7 +19,7 @@ export default async function SprintsPage({
       members: { some: { userId: session.user.id } },
     },
   });
-  if (!project) redirect("/");
+  if (!project) redirect("/dashboard");
 
   const sprints = await prisma.sprint.findMany({
     where: { projectId },

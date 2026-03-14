@@ -1,35 +1,21 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { ProjectsList } from "@/components/projects/projects-list";
-import { Header } from "@/components/layout/header";
+import { Navbar } from "@/components/landing/navbar";
+import { Hero } from "@/components/landing/hero";
+import { Features } from "@/components/landing/features";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { Pricing } from "@/components/landing/pricing";
+import { Footer } from "@/components/landing/footer";
 
-export default async function HomePage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-
-  const projects = await prisma.project.findMany({
-    where: {
-      members: { some: { userId: session.user.id } },
-    },
-    include: {
-      _count: { select: { stories: true, sprints: true } },
-      sprints: {
-        where: { status: "ACTIVE" },
-        take: 1,
-      },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
-
+export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
-      <div className="flex flex-1">
-        <div className="flex-1 p-6 md:p-8">
-          <ProjectsList projects={projects} userId={session.user.id} />
-        </div>
-      </div>
+      <Navbar />
+      <main className="flex-1">
+        <Hero />
+        <Features />
+        <HowItWorks />
+        <Pricing />
+      </main>
+      <Footer />
     </div>
   );
 }
