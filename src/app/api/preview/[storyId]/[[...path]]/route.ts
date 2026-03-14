@@ -54,6 +54,7 @@ async function proxyRequest(
     );
   }
 
+  const basePath = `/api/preview/${storyId}`;
   const targetPath = path ? `/${path.join("/")}` : "/";
   const url = new URL(targetPath, `http://localhost:${previewPort}`);
   url.search = req.nextUrl.search;
@@ -71,6 +72,9 @@ async function proxyRequest(
     const fetchOptions: RequestInit = {
       method: req.method,
       headers,
+      // Don't follow redirects — we need to rewrite Location headers
+      // so the browser stays within the proxy path.
+      redirect: "manual",
     };
 
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -85,6 +89,45 @@ async function proxyRequest(
     responseHeaders.delete("transfer-encoding");
     // Remove content-encoding since fetch() already decompressed the body
     responseHeaders.delete("content-encoding");
+
+    // Rewrite redirect Location headers to stay within the proxy path.
+    // Without this, redirects like /login or /dashboard escape the proxy
+    // and navigate to the main app instead of the preview server.
+    const location = responseHeaders.get("location");
+    if (location && response.status >= 300 && response.status < 400) {
+      let rewrittenLocation = location;
+      // Absolute path redirect (e.g. /login, /dashboard)
+      if (location.startsWith("/")) {
+        rewrittenLocation = `${basePath}${location}`;
+      }
+      // Full URL redirect pointing at the preview server
+      else if (location.startsWith(`http://localhost:${previewPort}`)) {
+        const redirectPath = new URL(location).pathname + new URL(location).search;
+        rewrittenLocation = `${basePath}${redirectPath}`;
+      }
+      responseHeaders.set("location", rewrittenLocation);
+      return new NextResponse(null, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    }
+
+    // Rewrite asset URLs in HTML responses so CSS/JS load through the proxy
+    // instead of going to the main server (where they'd 404).
+    const contentType = responseHeaders.get("content-type") || "";
+    if (contentType.includes("text/html")) {
+      const html = await response.text();
+      const rewritten = html
+        .replaceAll("/_next/", `${basePath}/_next/`)
+        .replaceAll("/__nextjs", `${basePath}/__nextjs`);
+      responseHeaders.delete("content-length");
+      return new NextResponse(rewritten, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+      });
+    }
 
     return new NextResponse(response.body, {
       status: response.status,

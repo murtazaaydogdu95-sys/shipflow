@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shipflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: shipflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shipflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: shipflow
+      POSTGRES_USER: shipflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: "0 2 * * *"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - db_backups:/backups
+    restart: unless-stopped
+
+  shipflow:
+    image: ghcr.io/${GITHUB_REPO}:latest
+    ports:
+      - "3001:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://shipflow:${POSTGRES_PASSWORD}@postgres:5432/shipflow
+      AUTH_TRUST_HOST: "true"
+      SHIPFLOW_REPOS_DIR: /app/repos
+    volumes:
+      - repos_data:/app/repos
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  repos_data:
+  db_backups:

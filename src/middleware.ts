@@ -5,8 +5,9 @@ import { authRateLimit, apiRateLimit } from "@/lib/rate-limit";
 export default auth(async (req) => {
   const { pathname } = req.nextUrl;
 
-  // Rate limit auth API calls
-  if (pathname.startsWith("/api/auth")) {
+  // Rate limit auth API calls (exclude session check — it's a harmless read
+  // called by SessionProvider on every page load, tab focus, and navigation)
+  if (pathname.startsWith("/api/auth") && !pathname.startsWith("/api/auth/session")) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const result = await authRateLimit.check(ip);
     if (!result.allowed) {
