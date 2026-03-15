@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
+
+const emptySubscribe = () => () => {};
+function useHasMounted() {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false);
+}
 
 const LAUNCH_DATE = new Date("2026-03-15T20:00:00");
 
@@ -43,10 +48,9 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 
 export function CountdownTimer() {
   const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHasMounted();
 
   useEffect(() => {
-    setMounted(true);
     const timer = setInterval(() => {
       setTimeLeft(calculateTimeLeft());
     }, 1000);
