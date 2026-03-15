@@ -1,6 +1,21 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { authRateLimit, apiRateLimit } from "@/lib/rate-limit";
+
+// Lightweight in-memory sliding-window rate limiter for Edge middleware.
+// Avoids importing @upstash/ratelimit + @upstash/redis which bloat the
+// Edge Function beyond Vercel's 1 MB limit.
+const hits = new Map<string, number[]>();
+function edgeRateLimit(key: string, maxReqs: number, windowMs: number): { allowed: boolean; resetAt: number } {
+  const now = Date.now();
+  const timestamps = (hits.get(key) || []).filter((t) => now - t < windowMs);
+  if (timestamps.length >= maxReqs) {
+    hits.set(key, timestamps);
+    return { allowed: false, resetAt: timestamps[0] + windowMs };
+  }
+  timestamps.push(now);
+  hits.set(key, timestamps);
+  return { allowed: true, resetAt: now + windowMs };
+}
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl;
@@ -9,7 +24,7 @@ export default auth(async (req) => {
   // called by SessionProvider on every page load, tab focus, and navigation)
   if (pathname.startsWith("/api/auth") && !pathname.startsWith("/api/auth/session")) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const result = await authRateLimit.check(ip);
+    const result = edgeRateLimit(`auth:${ip}`, 10, 60_000);
     if (!result.allowed) {
       return NextResponse.json(
         { error: "Too many requests" },
@@ -21,7 +36,7 @@ export default auth(async (req) => {
   // API-wide rate limiting (exclude /api/auth and /api/health)
   if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth") && !pathname.startsWith("/api/health")) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    const result = await apiRateLimit.check(ip);
+    const result = edgeRateLimit(`api:${ip}`, 60, 60_000);
     if (!result.allowed) {
       return NextResponse.json(
         { error: "Too many requests" },
