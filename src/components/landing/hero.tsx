@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, MoveRight, Sparkles } from "lucide-react";
+import { CountdownTimer } from "@/components/countdown-timer";
 
 export function Hero() {
   const [titleNumber, setTitleNumber] = useState(0);
@@ -40,11 +41,16 @@ export function Hero() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-32 bg-gradient-to-t from-background to-transparent" />
 
       <div className="mx-auto max-w-6xl px-4 pb-20 pt-24 text-center md:pb-28 md:pt-36">
+        {/* Launch countdown */}
+        <div className="mb-10">
+          <CountdownTimer />
+        </div>
+
         {/* Trust badge */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
         >
           <Badge variant="secondary" className="mb-6 gap-1.5 px-3 py-1.5 text-sm font-medium border border-border/60 shadow-sm">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
