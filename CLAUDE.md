@@ -19,8 +19,9 @@ AI-powered sprint board that turns your ideas into shipped code. Just write what
 - **2FA/MFA** — TOTP-based two-factor authentication with QR code setup, backup codes (SHA-256 hashed), and login challenge flow.
 - **Password Reset** — Forgot password flow with email token (1-hour expiry) and bcrypt password hashing.
 - **GDPR Compliance** — Privacy policy and Terms of Service pages. Account deletion support.
-- **Landing Page** — Public marketing page at `/` with hero, features, how-it-works, pricing, and footer. Dashboard at `/dashboard`.
-- **Dev Previews** — Auto-starts `next dev` on a free port after agent completes a story. Proxied through `/api/preview/[storyId]/`.
+- **Landing Page** — Public marketing page at `/` with hero (animated countdown timer, rotating taglines), features, how-it-works, pricing, and footer. Dashboard at `/dashboard`.
+- **Launch Countdown** — Animated countdown timer integrated into the hero section with gradient purple numbers, glow effect, and "Launching in" / "We're Live" states. Component: `src/components/countdown-timer.tsx`.
+- **Dev Previews** — Auto-starts `next dev` on a free port after agent completes a story. Proxied through `/api/preview/[storyId]/` with URL rewriting for CSS/JS assets and redirect handling to keep navigation within the proxy.
 - **Story Dependencies** — Block stories on other stories. Visual blocker indicator on cards. Agent queue respects dependencies.
 - **Epics/Grouping** — Parent-child story hierarchy via `parentId`. Epic indicator on cards showing child count.
 - **File Attachments** — Upload files/screenshots to stories (10MB limit). Drag-and-drop upload with image preview.
@@ -33,7 +34,7 @@ AI-powered sprint board that turns your ideas into shipped code. Just write what
 - **Undo/Revert Agent Work** — One-click revert of agent branches, resetting story to TODO.
 - **Outgoing Webhooks** — HMAC-SHA256 signed webhook dispatch on story events (created, moved, updated, agent completed). Delivery tracking with exponential backoff retries (5 attempts max, cron-driven).
 - **Health Check** — `GET /api/health` returns status with DB connectivity check. No auth required.
-- **Rate Limiting** — Upstash Redis rate limiting (with in-memory fallback for local dev) on auth routes (10 req/min) and API routes (60 req/min). Fail-open on Redis errors.
+- **Rate Limiting** — Upstash Redis rate limiting (with in-memory fallback for local dev) on auth routes (10 req/min, excluding `/api/auth/session`) and API routes (60 req/min). Fail-open on Redis errors.
 - **Audit Log** — Expanded audit logging for project/org CRUD operations with IP tracking.
 - **Admin Dashboard** — Admin-only page with user/project/story counts and user management.
 - **Public Roadmap** — Public page at `/roadmap` showing stories from public projects.
@@ -292,8 +293,12 @@ ShipFlow/
 │   ├── types/index.ts               # TypeScript types & constants
 │   └── middleware.ts                # Auth middleware + rate limiting + 2FA redirect
 ├── CHANGELOG.md                 # Project changelog
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI/CD (lint, build, Docker deploy to VPS)
 ├── Dockerfile                   # Multi-stage build (deps → builder → runner)
-├── docker-compose.yml           # PostgreSQL + Ollama + ShipFlow
+├── docker-compose.yml           # PostgreSQL + Ollama + ShipFlow (local dev)
+├── docker-compose.prod.yml      # Production compose for VPS (pulls pre-built image from GHCR)
 ├── docker-entrypoint.sh         # Wait for DB, push schema, seed, start
 ├── .dockerignore
 └── package.json
@@ -391,7 +396,7 @@ The agent system (`src/lib/agent-trigger.ts`) manages autonomous Claude Code age
 - **Commit prefixes** by story type: feature→`feat`, bug→`fix`, chore→`chore`, refactor→`refactor`, docs→`docs`, test→`test`
 - **MCP tools** available to agent: `list_stories`, `get_story`, `get_next_story`, `update_story_status`, `complete_story`, `add_note`
 - **Logs:** Agent output written to `/tmp/shipflow-agent-{storyId}.log`. Viewable in story detail modal via `/api/projects/[projectId]/stories/[storyId]/logs`.
-- **Preview:** Auto-starts `npx next dev` on a free port after agent completes. Proxied through `/api/preview/[storyId]/`.
+- **Preview:** Auto-starts `npx next dev` on a free port after agent completes. Proxied through `/api/preview/[storyId]/` with HTML URL rewriting (`/_next/` → proxy path) and redirect interception (`redirect: "manual"` + Location header rewriting).
 - **Revert:** `POST /api/projects/[projectId]/stories/[storyId]/revert` deletes the agent branch and resets the story.
 - **AI Review:** Auto-triggered on agent completion. Scores code 0-100 with issue-by-issue breakdown.
 
@@ -424,7 +429,7 @@ All API routes support two auth methods:
 - **API routes** — Use `requireProjectAccess()` from `@/lib/api-auth` for auth
 - **Schema changes** — Run `npx prisma db push` (no migrations, using db push)
 - **File uploads** — Stored in `public/uploads/`, max 10MB per file. SVG uploads are blocked (XSS risk).
-- **Rate limiting** — Auth routes: 10 req/min, API routes: 60 req/min. Upstash Redis when `UPSTASH_REDIS_REST_URL` is set, in-memory fallback otherwise. Fail-open on Redis errors.
+- **Rate limiting** — Auth routes: 10 req/min (excluding `/api/auth/session`), API routes: 60 req/min. Upstash Redis when `UPSTASH_REDIS_REST_URL` is set, in-memory fallback otherwise. Fail-open on Redis errors.
 
 ## Security Conventions
 
@@ -481,3 +486,25 @@ SHIPFLOW_PROJECT_ID=<project-id>
 ```
 
 Commands: `shipflow stories`, `shipflow story <id>`, `shipflow create "title"`, `shipflow move <id> <status>`, `shipflow note <id> "msg"`, `shipflow complete <id>`
+
+## CI/CD & Deployment
+
+### GitHub Actions (`.github/workflows/ci.yml`)
+
+**Triggers:** Push to `main` + PRs to `main`
+
+- **Job 1: `lint-and-build`** — Runs on all triggers: `npm ci` → `prisma generate` → `npm run lint` → `npm run build`
+- **Job 2: `deploy`** — Push to `main` only (needs job 1): builds Docker image → pushes to GitHub Container Registry (GHCR) → SSHs into VPS → pulls new image → restarts
+
+### VPS Production Deployment (`docker-compose.prod.yml`)
+
+- Uses pre-built image from GHCR (no building on VPS)
+- ShipFlow on port 3001 (behind Caddy reverse proxy)
+- PostgreSQL with env-based password
+- Automatic daily database backups
+
+**Required GitHub repo secrets:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
+
+### Git Push Route
+
+The git-push API route (`/api/projects/[projectId]/git-push`) performs `git pull --rebase` before pushing to handle diverged remotes gracefully. Supports token-authenticated HTTPS push (via GitHub OAuth token) with automatic URL cleanup.

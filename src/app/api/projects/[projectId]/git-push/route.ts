@@ -66,8 +66,33 @@ export async function POST(
   const cwd = project.agentWorkingDir;
   const opts = { cwd, encoding: "utf-8" as const, timeout: 30000 };
 
+  // Helper: pull remote changes (rebase) before pushing to avoid rejection
+  const pullBeforePush = (branch: string) => {
+    try {
+      if (githubToken) {
+        const remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], opts).trim();
+        const authedUrl = remoteUrl.replace(
+          /^https:\/\//,
+          `https://x-access-token:${githubToken}@`
+        );
+        try {
+          execFileSync("git", ["pull", "--rebase", authedUrl, branch], { ...opts, timeout: 60000 });
+        } finally {
+          execFileSync("git", ["remote", "set-url", "origin", remoteUrl], opts);
+        }
+      } else {
+        execFileSync("git", ["pull", "--rebase", "origin", branch], { ...opts, timeout: 60000 });
+      }
+    } catch {
+      // Pull may fail if remote branch doesn't exist yet — that's fine
+    }
+  };
+
   // Helper: push with token-authenticated URL, then restore clean URL
   const authenticatedPush = (branch: string) => {
+    // Pull first to integrate any remote changes
+    pullBeforePush(branch);
+
     if (githubToken) {
       // Read current remote URL and inject token
       const remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], opts).trim();

@@ -113,12 +113,19 @@ async function proxyRequest(
       });
     }
 
-    // Rewrite asset URLs in HTML responses so CSS/JS load through the proxy
-    // instead of going to the main server (where they'd 404).
+    // Rewrite asset URLs in HTML and JS responses so CSS/JS load through
+    // the proxy instead of going to the main server (where they'd 404).
+    // JS files contain dynamic import paths like "/_next/static/chunks/..."
+    // that must also go through the proxy for React hydration to work.
     const contentType = responseHeaders.get("content-type") || "";
-    if (contentType.includes("text/html")) {
-      const html = await response.text();
-      const rewritten = html
+    const isRewritable =
+      contentType.includes("text/html") ||
+      contentType.includes("javascript") ||
+      contentType.includes("text/css");
+
+    if (isRewritable) {
+      const text = await response.text();
+      const rewritten = text
         .replaceAll("/_next/", `${basePath}/_next/`)
         .replaceAll("/__nextjs", `${basePath}/__nextjs`);
       responseHeaders.delete("content-length");

@@ -8,6 +8,29 @@ interface RewriteOptions {
   model?: string;
 }
 
+/** Extract and parse JSON from LLM text that may contain markdown fences or extra text */
+function parseAIJson(text: string): Record<string, unknown> {
+  // Strip markdown code fences if present
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  const cleaned = fenceMatch ? fenceMatch[1] : text;
+
+  // Find the first { ... } or [ ... ] block
+  const start = cleaned.search(/[{\[]/);
+  if (start === -1) throw new Error("No JSON found in AI response");
+
+  const openChar = cleaned[start];
+  const closeChar = openChar === "{" ? "}" : "]";
+  let depth = 0;
+  let end = start;
+  for (let i = start; i < cleaned.length; i++) {
+    if (cleaned[i] === openChar) depth++;
+    else if (cleaned[i] === closeChar) depth--;
+    if (depth === 0) { end = i; break; }
+  }
+
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
 export async function rewriteWithAI({ provider, apiKey, prompt, model }: RewriteOptions): Promise<Record<string, unknown>> {
   if (provider === "ollama") {
     const ollama = new OpenAI({
@@ -21,7 +44,7 @@ export async function rewriteWithAI({ provider, apiKey, prompt, model }: Rewrite
 
     const text = completion.choices[0]?.message?.content;
     if (!text) throw new Error("Empty response from Ollama");
-    return JSON.parse(text);
+    return parseAIJson(text);
   }
 
   if (provider === "openai") {
@@ -34,7 +57,7 @@ export async function rewriteWithAI({ provider, apiKey, prompt, model }: Rewrite
 
     const text = completion.choices[0]?.message?.content;
     if (!text) throw new Error("Empty response from OpenAI");
-    return JSON.parse(text);
+    return parseAIJson(text);
   }
 
   // Default: Anthropic
@@ -47,5 +70,5 @@ export async function rewriteWithAI({ provider, apiKey, prompt, model }: Rewrite
 
   const textContent = message.content[0];
   if (textContent.type !== "text") throw new Error("Unexpected AI response format");
-  return JSON.parse(textContent.text);
+  return parseAIJson(textContent.text);
 }
