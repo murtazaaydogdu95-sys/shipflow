@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { motion } from "framer-motion";
 
-const LAUNCH_DATE = new Date("2026-03-15T14:00:00");
+const LAUNCH_DATE = new Date("2026-03-15T20:00:00");
 
 interface TimeLeft {
   days: number;
@@ -30,11 +30,11 @@ function calculateTimeLeft(): TimeLeft {
 
 function TimeUnit({ value, label }: { value: number; label: string }) {
   return (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-4xl font-bold tabular-nums md:text-5xl">
+    <div className="flex flex-col items-center gap-1.5">
+      <span className="text-4xl font-extrabold tabular-nums bg-gradient-to-b from-primary via-chart-1 to-primary bg-clip-text text-transparent drop-shadow-[0_0_24px_var(--color-primary)] sm:text-5xl md:text-6xl">
         {String(value).padStart(2, "0")}
       </span>
-      <span className="text-muted-foreground text-xs uppercase tracking-wider">
+      <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
         {label}
       </span>
     </div>
@@ -55,35 +55,32 @@ export function CountdownTimer() {
 
   if (!mounted) return null;
 
-  const isLaunchSoon =
+  const isLaunched =
     timeLeft.days === 0 &&
     timeLeft.hours === 0 &&
     timeLeft.minutes === 0 &&
-    timeLeft.seconds === 0
-      ? true
-      : LAUNCH_DATE.getTime() - new Date().getTime() <= 24 * 60 * 60 * 1000;
+    timeLeft.seconds === 0;
 
   return (
-    <Card className="mx-auto mb-6 max-w-lg text-center">
-      <CardContent className="flex flex-col items-center gap-4">
-        <h2 className="text-lg font-semibold tracking-tight">
-          Countdown to Launch
-        </h2>
-        <div className="flex items-center gap-4">
-          <TimeUnit value={timeLeft.days} label="Days" />
-          <span className="text-muted-foreground text-3xl font-light">:</span>
-          <TimeUnit value={timeLeft.hours} label="Hours" />
-          <span className="text-muted-foreground text-3xl font-light">:</span>
-          <TimeUnit value={timeLeft.minutes} label="Minutes" />
-          <span className="text-muted-foreground text-3xl font-light">:</span>
-          <TimeUnit value={timeLeft.seconds} label="Seconds" />
-        </div>
-        {isLaunchSoon && (
-          <p className="text-primary animate-pulse text-sm font-semibold uppercase tracking-widest">
-            Launch Soon
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <motion.div
+      className="flex flex-col items-center gap-4"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <span className="text-xs uppercase tracking-[0.25em] text-muted-foreground font-medium">
+        {isLaunched ? "We're Live" : "Launching in"}
+      </span>
+
+      <div className="flex items-center gap-3 sm:gap-5">
+        <TimeUnit value={timeLeft.days} label="Days" />
+        <span className="text-2xl font-light text-muted-foreground/50 sm:text-3xl">:</span>
+        <TimeUnit value={timeLeft.hours} label="Hours" />
+        <span className="text-2xl font-light text-muted-foreground/50 sm:text-3xl">:</span>
+        <TimeUnit value={timeLeft.minutes} label="Min" />
+        <span className="text-2xl font-light text-muted-foreground/50 sm:text-3xl">:</span>
+        <TimeUnit value={timeLeft.seconds} label="Sec" />
+      </div>
+    </motion.div>
   );
 }
