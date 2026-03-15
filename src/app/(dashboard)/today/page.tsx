@@ -34,10 +34,12 @@ export default async function TodayPage() {
   stories.sort((a, b) => (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3));
 
   // Recently completed (last 7 days)
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const recentlyDone = await prisma.story.findMany({
     where: {
       status: "DONE",
-      updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      updatedAt: { gte: sevenDaysAgo },
       project: user?.currentOrgId ? { orgId: user.currentOrgId } : { members: { some: { userId } } },
     },
     include: {
