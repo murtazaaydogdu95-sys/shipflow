@@ -61,3 +61,4 @@ packages/mcp-server/.mcp.json
 
 # GitHub-imported repos
 shipflow/
+.env*.local
