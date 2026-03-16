@@ -1,9 +1,7 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 // Lightweight in-memory sliding-window rate limiter for Edge middleware.
-// Avoids importing @upstash/ratelimit + @upstash/redis which bloat the
-// Edge Function beyond Vercel's 1 MB limit.
 const hits = new Map<string, number[]>();
 function edgeRateLimit(key: string, maxReqs: number, windowMs: number): { allowed: boolean; resetAt: number } {
   const now = Date.now();
@@ -17,11 +15,10 @@ function edgeRateLimit(key: string, maxReqs: number, windowMs: number): { allowe
   return { allowed: true, resetAt: now + windowMs };
 }
 
-export default auth(async (req) => {
+export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Rate limit auth API calls (exclude session check — it's a harmless read
-  // called by SessionProvider on every page load, tab focus, and navigation)
+  // Rate limit auth API calls (exclude session check)
   if (pathname.startsWith("/api/auth") && !pathname.startsWith("/api/auth/session")) {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const result = edgeRateLimit(`auth:${ip}`, 10, 60_000);
@@ -45,11 +42,13 @@ export default auth(async (req) => {
     }
   }
 
+  // Decode JWT token (lightweight — no provider imports)
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
+
   // If authenticated and 2FA required, enforce 2FA on both pages and API routes
-  // Allow: /verify-2fa page, /api/auth/*, /api/account/2fa/* (needed for the 2FA flow itself)
   if (
-    req.auth?.user &&
-    (req.auth as { token?: { requires2FA?: boolean } }).token?.requires2FA &&
+    token &&
+    token.requires2FA &&
     !pathname.startsWith("/verify-2fa") &&
     !pathname.startsWith("/api/auth") &&
     !pathname.startsWith("/api/account/2fa")
@@ -61,10 +60,9 @@ export default auth(async (req) => {
   }
 
   // If authenticated and onboarding not completed, redirect to onboarding
-  // Skip for: onboarding page, API routes, and dashboard (landing page after completing onboarding)
   if (
-    req.auth?.user &&
-    !req.auth.user.onboardingCompleted &&
+    token &&
+    !token.onboardingCompleted &&
     !pathname.startsWith("/onboarding") &&
     !pathname.startsWith("/api/") &&
     pathname !== "/dashboard"
@@ -73,7 +71,7 @@ export default auth(async (req) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!api/invites|api/health|api/cron|api/docs|api/preview|api/billing/webhook|_next/static|_next/image|favicon.ico|login|invite|privacy|terms|forgot-password|reset-password|verify-2fa|roadmap|changelog).+)"],
