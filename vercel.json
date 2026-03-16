@@ -1,4 +1,11 @@
 {
+  "redirects": [
+    {
+      "source": "/((?!maintenance.html|_next/static|favicon.ico).*)",
+      "destination": "/maintenance.html",
+      "permanent": false
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron/agent-cleanup",
