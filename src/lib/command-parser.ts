@@ -12,30 +12,30 @@ const PATTERNS: Array<{
   targetFn?: (match: RegExpMatchArray) => string;
 }> = [
   {
-    regex: /^move\s+(SF-\d+)\s+to\s+(backlog|todo|in[_ ]progress|review|done|icebox)/i,
+    regex: /^move\s+(CP-\d+)\s+to\s+(backlog|todo|in[_ ]progress|review|done|icebox)/i,
     type: "move",
     descriptionFn: (m) => `Move ${m[1]} to ${m[2]}`,
     targetFn: (m) => m[2].toUpperCase().replace(" ", "_").replace("IN_PROGRESS", "IN_PROGRESS"),
   },
   {
-    regex: /^close\s+(SF-\d+)/i,
+    regex: /^close\s+(CP-\d+)/i,
     type: "close",
     descriptionFn: (m) => `Close ${m[1]} (move to Done)`,
     targetFn: () => "DONE",
   },
   {
-    regex: /^delete\s+(SF-\d+)/i,
+    regex: /^delete\s+(CP-\d+)/i,
     type: "delete",
     descriptionFn: (m) => `Delete ${m[1]}`,
   },
   {
-    regex: /^prioritize\s+(SF-\d+)\s+(?:as\s+)?(critical|high|medium|low)/i,
+    regex: /^prioritize\s+(CP-\d+)\s+(?:as\s+)?(critical|high|medium|low)/i,
     type: "prioritize",
     descriptionFn: (m) => `Set ${m[1]} priority to ${m[2]}`,
     targetFn: (m) => m[2].toUpperCase(),
   },
   {
-    regex: /^assign\s+(SF-\d+)\s+to\s+next\s+sprint/i,
+    regex: /^assign\s+(CP-\d+)\s+to\s+next\s+sprint/i,
     type: "assign-sprint",
     descriptionFn: (m) => `Assign ${m[1]} to next sprint`,
   },

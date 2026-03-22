@@ -45,10 +45,10 @@ export async function GET(req: Request) {
 function htmlPage(message: string) {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Unsubscribe - ShipFlow</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Unsubscribe - Codepylot</title></head>
 <body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f9fafb;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh;">
   <div style="max-width:400px;text-align:center;padding:40px 20px;">
-    <h1 style="font-size:24px;margin:0 0 16px;">ShipFlow</h1>
+    <h1 style="font-size:24px;margin:0 0 16px;">Codepylot</h1>
     <p style="font-size:16px;color:#374151;">${message}</p>
   </div>
 </body>

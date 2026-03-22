@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { lemonSqueezyEnabled, getCustomerPortalUrl } from "@/lib/lemonsqueezy";
+import { paddleEnabled, getCustomerPortalUrl } from "@/lib/paddle";
 import { checkOrgPermission } from "@/lib/permissions";
 
 export async function POST() {
-  if (!lemonSqueezyEnabled) {
+  if (!paddleEnabled) {
     return NextResponse.json({ error: "Billing not configured" }, { status: 503 });
   }
 

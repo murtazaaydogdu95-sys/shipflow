@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { createStorySchema } from "@/lib/validations/story";
-import { checkStoryLimit } from "@/lib/plan-limits";
+import { checkStoryLimit, checkStoryLimitByProject } from "@/lib/plan-limits";
 import { processNextStory } from "@/lib/agent-trigger";
 import { apiRateLimit } from "@/lib/rate-limit";
 import { dispatchWebhook } from "@/lib/webhooks";
@@ -75,9 +75,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
   if (!parsed.ok) return parsed.response;
   const data = createStorySchema.parse(parsed.data);
 
-  // Check plan limits (only for session auth — API key users are project-scoped)
+  // Check plan limits for all auth methods
   if (access.type === "session") {
     const limitCheck = await checkStoryLimit(projectId, access.userId);
+    if (!limitCheck.allowed) {
+      return NextResponse.json({ error: limitCheck.message }, { status: 403 });
+    }
+  } else if (access.type === "apikey") {
+    // API key: resolve plan via project's org (no userId available)
+    const limitCheck = await checkStoryLimitByProject(projectId);
     if (!limitCheck.allowed) {
       return NextResponse.json({ error: limitCheck.message }, { status: 403 });
     }
@@ -100,7 +106,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
 
   let story;
   for (let attempt = 0; attempt < 10; attempt++) {
-    const shortId = `SF-${String(nextNum).padStart(3, "0")}`;
+    const shortId = `CP-${String(nextNum).padStart(3, "0")}`;
     try {
       story = await prisma.story.create({
         data: {

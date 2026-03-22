@@ -42,10 +42,10 @@ export async function POST(
 
   if (event === "push") {
     for (const commit of payload.commits || []) {
-      // Match [SF-XXX] pattern in commit messages
-      const matches = commit.message.matchAll(/\[SF-(\d+)\]/gi);
+      // Match [CP-XXX] pattern in commit messages
+      const matches = commit.message.matchAll(/\[CP-(\d+)\]/gi);
       for (const match of matches) {
-        const shortId = `SF-${match[1]}`;
+        const shortId = `CP-${match[1]}`;
         const story = await prisma.story.findFirst({
           where: { projectId, shortId },
         });
@@ -83,9 +83,9 @@ export async function POST(
   if (event === "pull_request") {
     const pr = payload.pull_request;
     if (pr) {
-      const matches = pr.title.matchAll(/\[SF-(\d+)\]/gi);
+      const matches = pr.title.matchAll(/\[CP-(\d+)\]/gi);
       for (const match of matches) {
-        const shortId = `SF-${match[1]}`;
+        const shortId = `CP-${match[1]}`;
         const story = await prisma.story.findFirst({
           where: { projectId, shortId },
         });
@@ -102,11 +102,11 @@ export async function POST(
             },
           });
 
-          // Auto-comment on the PR to link to the ShipFlow story
+          // Auto-comment on the PR to link to the Codepylot story
           if (payload.action === "opened" || payload.action === "synchronize") {
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
             const storyUrl = `${appUrl}/projects/${projectId}?story=${story.id}`;
-            const commentBody = `Linked to ShipFlow story [${story.shortId}](${storyUrl}) — ${story.title}`;
+            const commentBody = `Linked to Codepylot story [${story.shortId}](${storyUrl}) — ${story.title}`;
 
             // Get GitHub access token from project owner's account
             const projectMember = await prisma.projectMember.findFirst({

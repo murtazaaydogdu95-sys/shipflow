@@ -54,13 +54,13 @@ export async function POST(req: Request) {
     // when two cron runs overlap
     try {
       await prisma.$transaction(async (tx) => {
-        // Use raw SQL MAX for reliable numeric sort (text sort breaks past SF-999)
+        // Use raw SQL MAX for reliable numeric sort (text sort breaks past CP-999)
         const maxResult = await tx.$queryRaw<[{ max_num: number | null }]>`
           SELECT MAX(CAST(SUBSTRING("shortId" FROM 4) AS INTEGER)) as max_num
           FROM "Story"
         `;
         const seq = (maxResult[0]?.max_num ?? 0) + 1;
-        const shortId = `SF-${String(seq).padStart(3, "0")}`;
+        const shortId = `CP-${String(seq).padStart(3, "0")}`;
 
         await tx.story.create({
           data: {

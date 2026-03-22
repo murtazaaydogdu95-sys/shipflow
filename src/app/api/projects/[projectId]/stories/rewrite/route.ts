@@ -7,8 +7,9 @@ import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteStorySchema } from "@/lib/validations/story";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
 import { checkRewriteLimit } from "@/lib/plan-limits";
-import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
+import { PLAN_LIMITS } from "@/lib/paddle";
 import { parseJsonBody } from "@/lib/api-error";
+import { safeDecrypt } from "@/lib/encryption";
 
 export async function POST(
   req: Request,
@@ -31,7 +32,8 @@ export async function POST(
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
   const provider = project.aiProvider || "ollama";
-  const hasByok = !!(project.aiApiKey && provider !== "ollama");
+  const decryptedAiKey = safeDecrypt(project.aiApiKey);
+  const hasByok = !!(decryptedAiKey && provider !== "ollama");
 
   // Check rewrite limits (BYOK users bypass)
   const userId = access.type === "session" ? access.userId : "";
@@ -50,7 +52,7 @@ export async function POST(
   const apiKey =
     provider === "ollama"
       ? undefined
-      : project.aiApiKey ||
+      : decryptedAiKey ||
         (provider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined);
 
   if (provider !== "ollama" && !apiKey) {
@@ -62,7 +64,7 @@ export async function POST(
 
   // Select model: BYOK gets Sonnet, platform key uses plan-based model
   let model: string | undefined;
-  if (provider === "anthropic" && !project.aiApiKey) {
+  if (provider === "anthropic" && !decryptedAiKey) {
     // Using platform key — select model based on plan
     const org = project.orgId
       ? await prisma.organization.findUnique({

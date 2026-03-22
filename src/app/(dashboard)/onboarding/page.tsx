@@ -90,7 +90,7 @@ export default function OnboardingPage() {
               </div>
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Welcome to ShipFlow, {userName}!</h1>
+              <h1 className="text-2xl font-bold">Welcome to Codepylot, {userName}!</h1>
               <p className="text-muted-foreground mt-2">
                 Let&apos;s set up your workspace in a few seconds.
               </p>

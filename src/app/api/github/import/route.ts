@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   }
 
   const baseDir =
-    process.env.SHIPFLOW_REPOS_DIR || join(homedir(), ".shipflow", "repos");
+    process.env.CODEPYLOT_REPOS_DIR || join(homedir(), ".codepylot", "repos");
   mkdirSync(baseDir, { recursive: true });
 
   const targetDir = join(baseDir, data.name);
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to clone repository" }, { status: 500 });
   }
 
-  // Create ShipFlow project
+  // Create Codepylot project
   const slug =
     data.name
       .toLowerCase()

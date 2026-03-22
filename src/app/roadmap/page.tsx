@@ -1,6 +1,22 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { Rocket } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Codepylot Roadmap — See What We're Building Next",
+  description:
+    "View the public Codepylot product roadmap. See planned features, what's in progress, and recently shipped updates.",
+  alternates: {
+    canonical: "https://codepylot.io/roadmap",
+  },
+  openGraph: {
+    title: "Codepylot Roadmap",
+    description: "See what we're building next. Public product roadmap for Codepylot.",
+    url: "https://codepylot.io/roadmap",
+    siteName: "Codepylot",
+  },
+};
 
 const STATUS_COLUMNS = [
   { status: "TODO", label: "Planned" },
@@ -58,7 +74,7 @@ export default async function RoadmapPage({
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2 font-bold text-lg">
             <Rocket className="h-5 w-5" />
-            ShipFlow Roadmap
+            Codepylot Roadmap
           </Link>
         </div>
       </header>

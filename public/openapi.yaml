@@ -1,9 +1,9 @@
 openapi: "3.0.3"
 info:
-  title: ShipFlow API
+  title: Codepylot API
   version: "1.0.0"
   description: |
-    ShipFlow API — AI-powered sprint board that turns your ideas into shipped code.
+    Codepylot API — AI-powered sprint board that turns your ideas into shipped code.
 
     Authentication: Use `Authorization: Bearer <api-key>` header or session cookie.
 servers:

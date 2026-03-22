@@ -133,7 +133,7 @@ export function Hero() {
                 <div className="h-3 w-3 rounded-full bg-red-500/80" />
                 <div className="h-3 w-3 rounded-full bg-yellow-500/80" />
                 <div className="h-3 w-3 rounded-full bg-green-500/80" />
-                <span className="ml-3 text-xs text-muted-foreground font-mono">shipflow</span>
+                <span className="ml-3 text-xs text-muted-foreground font-mono">codepylot</span>
               </div>
               {/* Mock content */}
               <div className="space-y-3 font-mono text-xs md:text-sm">
@@ -148,7 +148,7 @@ export function Hero() {
                 <div className="rounded-lg border border-border/60 bg-muted/50 p-3 space-y-1.5">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex h-5 items-center rounded bg-chart-2/20 px-1.5 text-[10px] font-semibold text-chart-2 uppercase">feature</span>
-                    <span className="font-semibold text-foreground">SF-042 User Settings Page</span>
+                    <span className="font-semibold text-foreground">CP-042 User Settings Page</span>
                   </div>
                   <div className="text-muted-foreground text-xs">As a user, I want to edit my profile so I can update my name and avatar.</div>
                   <div className="flex gap-3 text-[10px] text-muted-foreground">
@@ -159,7 +159,7 @@ export function Hero() {
                 </div>
                 <div className="flex gap-2 text-muted-foreground">
                   <span className="text-green-500">{">"}</span>
-                  <span>Agent picked up SF-042 &middot; branch <span className="text-foreground">feat/SF-042-user-settings</span></span>
+                  <span>Agent picked up CP-042 &middot; branch <span className="text-foreground">feat/CP-042-user-settings</span></span>
                 </div>
                 <div className="flex gap-2 text-muted-foreground">
                   <span className="text-green-500">{">"}</span>

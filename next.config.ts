@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
+  // Use a separate build directory for E2E test server / preview servers to avoid .next/dev/lock conflicts
+  ...(process.env.NEXT_TEST_MODE && { distDir: ".next-test" }),
   // Global body size limit for all API routes (1MB default)
   serverExternalPackages: [],
   experimental: {
@@ -23,11 +26,12 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
+              `script-src 'self' 'unsafe-inline' ${process.env.NODE_ENV === "development" ? "'unsafe-eval'" : ""} https://cdn.paddle.com https://us-assets.i.posthog.com https://unpkg.com`.trim(),
+              "style-src 'self' 'unsafe-inline' https://unpkg.com",
               "img-src 'self' data: blob: https://avatar.vercel.sh https://avatars.githubusercontent.com https://lh3.googleusercontent.com",
               "font-src 'self'",
-              "connect-src 'self' https://api.github.com",
+              "connect-src 'self' https://api.github.com https://us.i.posthog.com https://us-assets.i.posthog.com https://checkout.paddle.com https://sandbox-cdn.paddle.com",
+              "frame-src 'self' https://checkout.paddle.com https://sandbox-checkout.paddle.com",
               "frame-ancestors 'none'",
             ].join("; "),
           },

@@ -5,6 +5,7 @@ import { updateProjectSchema } from "@/lib/validations/project";
 import { sanitizeError, sanitizeValidationError, parseJsonBody } from "@/lib/api-error";
 import { existsSync, rmSync } from "fs";
 import { createAuditLog } from "@/lib/audit-log";
+import { encrypt, safeDecrypt } from "@/lib/encryption";
 
 export async function GET(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -26,6 +27,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       agentMinPriority: true,
       agentWorkingDir: true,
       aiProvider: true,
+      aiApiKey: true,
       maxConcurrentAgents: true,
       deployProvider: true,
       deployProjectId: true,
@@ -39,7 +41,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
   });
 
   if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(project);
+
+  return NextResponse.json({ ...project, aiApiKey: safeDecrypt(project.aiApiKey) || undefined });
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
@@ -55,6 +58,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
     data = updateProjectSchema.parse(parsed.data);
   } catch (err) {
     return NextResponse.json({ error: sanitizeValidationError(err) }, { status: 400 });
+  }
+
+  // Encrypt aiApiKey before storing
+  if (data.aiApiKey) {
+    data.aiApiKey = encrypt(data.aiApiKey);
   }
 
   try {

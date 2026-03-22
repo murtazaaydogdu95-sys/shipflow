@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
+import { PLAN_LIMITS } from "@/lib/paddle";
 
 export async function GET(
   req: Request,
@@ -41,15 +41,16 @@ export async function GET(
   // Count members
   const memberCount = await prisma.orgMember.count({ where: { orgId } });
 
-  // Count AI rewrites today
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  // Count AI rewrites this month (from 1st of month UTC)
+  const startOfMonth = new Date();
+  startOfMonth.setUTCDate(1);
+  startOfMonth.setUTCHours(0, 0, 0, 0);
   const aiRewriteCount = projectIds.length > 0
     ? await prisma.activity.count({
         where: {
           projectId: { in: projectIds },
           type: "STORY_REWRITTEN",
-          createdAt: { gte: startOfDay },
+          createdAt: { gte: startOfMonth },
         },
       })
     : 0;
@@ -68,8 +69,8 @@ export async function GET(
     members: { count: memberCount },
     aiRewrites: {
       used: aiRewriteCount,
-      limit: limits.maxAIRewritesPerDay,
-      period: "today",
+      limit: limits.maxAIRewritesPerMonth === Infinity ? null : limits.maxAIRewritesPerMonth,
+      period: "month",
     },
   });
 }

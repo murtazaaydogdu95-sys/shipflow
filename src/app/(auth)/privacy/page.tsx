@@ -6,24 +6,24 @@ export default function PrivacyPage() {
         <p><strong>Last updated:</strong> March 2026</p>
 
         <h2 className="text-xl font-semibold mt-6">1. Data We Collect</h2>
-        <p>We collect the minimum data needed to provide ShipFlow:</p>
+        <p>We collect the minimum data needed to provide Codepylot:</p>
         <ul className="list-disc pl-6 space-y-1">
           <li><strong>Account data:</strong> Name, email, and profile picture from your OAuth provider (GitHub or Google)</li>
           <li><strong>Project data:</strong> Projects, stories, sprints, and acceptance criteria you create</li>
           <li><strong>Usage data:</strong> Activity logs of actions taken within the app (story creation, status changes, etc.)</li>
-          <li><strong>Payment data:</strong> Processed by Lemon Squeezy. We store only your customer ID and subscription status.</li>
+          <li><strong>Payment data:</strong> Processed by Paddle. We store only your customer ID and subscription status.</li>
         </ul>
 
         <h2 className="text-xl font-semibold mt-6">2. How We Use Your Data</h2>
         <ul className="list-disc pl-6 space-y-1">
-          <li>To provide and improve the ShipFlow service</li>
+          <li>To provide and improve the Codepylot service</li>
           <li>To process payments and manage subscriptions</li>
           <li>To send service-related notifications</li>
         </ul>
 
         <h2 className="text-xl font-semibold mt-6">3. Third-Party Services</h2>
         <ul className="list-disc pl-6 space-y-1">
-          <li><strong>Lemon Squeezy</strong> for payment processing</li>
+          <li><strong>Paddle</strong> for payment processing</li>
           <li><strong>Sentry</strong> for error monitoring (anonymous crash reports)</li>
           <li><strong>GitHub/Google</strong> for authentication</li>
           <li><strong>Anthropic/Ollama</strong> for AI story rewriting (story text is sent to the configured AI provider)</li>
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
         </ul>
 
         <h2 className="text-xl font-semibold mt-6">6. Contact</h2>
-        <p>For privacy inquiries, contact us at privacy@shipflow.dev.</p>
+        <p>For privacy inquiries, contact us at privacy@codepylot.dev.</p>
       </div>
     </div>
   );

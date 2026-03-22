@@ -11,7 +11,7 @@ export async function POST() {
   const secret = new Secret({ size: 20 });
 
   const totp = new TOTP({
-    issuer: "ShipFlow",
+    issuer: "Codepylot",
     label: session.user.email || session.user.name || "User",
     algorithm: "SHA1",
     digits: 6,

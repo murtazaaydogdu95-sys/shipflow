@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: shipflow
-      POSTGRES_PASSWORD: shipflow
-      POSTGRES_DB: shipflow
+      POSTGRES_USER: codepylot
+      POSTGRES_PASSWORD: codepylot
+      POSTGRES_DB: codepylot
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shipflow"]
+      test: ["CMD-SHELL", "pg_isready -U codepylot"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,9 +22,9 @@ services:
         condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_DB: shipflow
-      POSTGRES_USER: shipflow
-      POSTGRES_PASSWORD: shipflow
+      POSTGRES_DB: codepylot
+      POSTGRES_USER: codepylot
+      POSTGRES_PASSWORD: codepylot
       SCHEDULE: "0 2 * * *"
       BACKUP_KEEP_DAYS: 7
       BACKUP_KEEP_WEEKS: 4
@@ -53,7 +53,7 @@ services:
     entrypoint: ["curl", "-sf", "http://ollama:11434/api/pull", "-d", "{\"name\": \"llama3.2\"}"]
     restart: "no"
 
-  shipflow:
+  codepylot:
     build: .
     ports:
       - "3000:3000"
@@ -64,11 +64,11 @@ services:
       - path: .env
         required: true
     environment:
-      DATABASE_URL: postgresql://shipflow:shipflow@postgres:5432/shipflow
+      DATABASE_URL: postgresql://codepylot:codepylot@postgres:5432/codepylot
       OLLAMA_URL: http://ollama:11434/v1
       AUTH_TRUST_HOST: "true"
       NEXTAUTH_URL: http://localhost:3000
-      SHIPFLOW_REPOS_DIR: /app/repos
+      CODEPYLOT_REPOS_DIR: /app/repos
     volumes:
       - repos_data:/app/repos
 

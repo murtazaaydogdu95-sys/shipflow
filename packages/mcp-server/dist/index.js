@@ -2,9 +2,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-const API_URL = process.env.SHIPFLOW_API_URL || "http://localhost:3000";
-const API_KEY = process.env.SHIPFLOW_API_KEY || "";
-const PROJECT_ID = process.env.SHIPFLOW_PROJECT_ID || "";
+const API_URL = process.env.CODEPYLOT_API_URL || "http://localhost:3000";
+const API_KEY = process.env.CODEPYLOT_API_KEY || "";
+const PROJECT_ID = process.env.CODEPYLOT_PROJECT_ID || "";
 async function apiFetch(path, options) {
     const res = await fetch(`${API_URL}${path}`, {
         ...options,
@@ -21,7 +21,7 @@ async function apiFetch(path, options) {
     return res.json();
 }
 const server = new McpServer({
-    name: "shipflow",
+    name: "codepylot",
     version: "1.0.0",
 });
 // Tool: List stories

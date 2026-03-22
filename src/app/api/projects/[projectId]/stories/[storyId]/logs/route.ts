@@ -28,7 +28,7 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const logPath = `/tmp/shipflow-agent-${storyId}.log`;
+  const logPath = `/tmp/codepylot-agent-${storyId}.log`;
 
   try {
     const content = await readFile(logPath, "utf-8");

@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-test/
 /out/
 
 # production
@@ -60,5 +61,13 @@ packages/mcp-server/.next/
 packages/mcp-server/.mcp.json
 
 # GitHub-imported repos
-shipflow/
+codepylot/
 .env*.local
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/
+e2e/.auth/
+
+pentest_agent.py

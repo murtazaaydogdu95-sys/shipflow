@@ -70,7 +70,7 @@ function InviteContent() {
             <Rocket className="h-6 w-6" />
           </div>
         </div>
-        <h1 className="text-xl font-bold">You&apos;ve been invited to ShipFlow</h1>
+        <h1 className="text-xl font-bold">You&apos;ve been invited to Codepylot</h1>
         <p className="text-muted-foreground">
           Click below to accept the invitation and join the organization.
         </p>

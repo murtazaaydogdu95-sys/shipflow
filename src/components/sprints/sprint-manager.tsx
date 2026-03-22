@@ -103,7 +103,7 @@ export function SprintManager({ sprints, backlogStories, projectId }: SprintMana
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button data-testid="create-sprint-btn">
               <Plus className="mr-2 h-4 w-4" />
               New Sprint
             </Button>

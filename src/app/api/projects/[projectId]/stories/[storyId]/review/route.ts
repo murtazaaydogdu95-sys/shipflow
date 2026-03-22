@@ -3,6 +3,7 @@ import { execFileSync } from "child_process";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
+import { safeDecrypt } from "@/lib/encryption";
 
 export async function GET(
   req: Request,
@@ -79,10 +80,11 @@ export async function POST(
   const truncatedDiff = diff.length > 15000 ? diff.slice(0, 15000) + "\n... (truncated)" : diff;
 
   const provider = project.aiProvider || "ollama";
+  const decryptedAiKey = safeDecrypt(project.aiApiKey);
   const apiKey =
     provider === "ollama"
       ? undefined
-      : project.aiApiKey ||
+      : decryptedAiKey ||
         (provider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined);
 
   if (provider !== "ollama" && !apiKey) {

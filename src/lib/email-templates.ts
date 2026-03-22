@@ -24,7 +24,7 @@ function layout(content: string, unsubscribeUrl?: string) {
       ${content}
     </div>
     <div style="text-align:center;margin-top:24px;font-size:12px;color:#9ca3af;">
-      <p>Sent by ShipFlow</p>
+      <p>Sent by Codepylot</p>
       ${unsubscribeUrl ? `<p><a href="${unsubscribeUrl}" style="color:#6b7280;text-decoration:underline;">Unsubscribe from email notifications</a></p>` : ""}
     </div>
   </div>
@@ -96,11 +96,11 @@ export function inviteEmail({
   inviteUrl: string;
 }) {
   return {
-    subject: `You're invited to join ${orgName} on ShipFlow`,
+    subject: `You're invited to join ${orgName} on Codepylot`,
     html: layout(
       `
       <h2 style="margin:0 0 16px;font-size:18px;">Organization Invite</h2>
-      <p style="margin:0 0 24px;color:#374151;"><strong>${esc(inviterName)}</strong> has invited you to join <strong>${esc(orgName)}</strong> on ShipFlow.</p>
+      <p style="margin:0 0 24px;color:#374151;"><strong>${esc(inviterName)}</strong> has invited you to join <strong>${esc(orgName)}</strong> on Codepylot.</p>
       <a href="${inviteUrl}" style="display:inline-block;background:#111827;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;">Accept Invite</a>
       <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">This invite expires in 7 days.</p>
       `
@@ -110,7 +110,7 @@ export function inviteEmail({
 
 export function passwordResetEmail({ resetUrl }: { resetUrl: string }) {
   return {
-    subject: "Reset your ShipFlow password",
+    subject: "Reset your Codepylot password",
     html: layout(
       `
       <h2 style="margin:0 0 16px;font-size:18px;">Password Reset</h2>
@@ -135,7 +135,7 @@ export function dailyDigestEmail({
     .map((n) => `<li style="margin:4px 0;color:#374151;">${esc(n.title)}: ${esc(n.message)}</li>`)
     .join("");
   return {
-    subject: `Your ShipFlow daily digest (${notifications.length} updates)`,
+    subject: `Your Codepylot daily digest (${notifications.length} updates)`,
     html: layout(
       `
       <h2 style="margin:0 0 16px;font-size:18px;">Daily Digest</h2>

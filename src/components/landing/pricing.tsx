@@ -13,10 +13,10 @@ const plans = [
     description: "For getting started",
     features: [
       "Up to 3 projects",
-      "50 stories per project",
+      "15 stories per project",
       "Kanban board with drag-and-drop",
       "Keyboard shortcuts & bulk ops",
-      "5 AI rewrites/day",
+      "4 AI rewrites/month",
       "Story templates (8 built-in)",
       "Natural language commands",
       "Export (CSV & JSON)",
@@ -33,7 +33,7 @@ const plans = [
     description: "For serious builders",
     features: [
       "Unlimited projects & stories",
-      "50 AI rewrites/day",
+      "50 AI rewrites/month",
       "Multi-agent (up to 3 parallel)",
       "AI code review & diff viewer",
       "Focus mode & story splitting",
@@ -49,6 +49,21 @@ const plans = [
     ],
     cta: "Start Pro Trial",
     highlighted: true,
+  },
+  {
+    name: "Pro Max",
+    price: "$39",
+    period: "/month",
+    description: "For power users & teams",
+    features: [
+      "Everything in Pro",
+      "Unlimited AI rewrites",
+      "Up to 5 parallel agents",
+      "Priority agent queue",
+      "Fastest story processing",
+    ],
+    cta: "Go Pro Max",
+    highlighted: false,
   },
 ];
 
@@ -73,7 +88,7 @@ export function Pricing() {
           </p>
         </motion.div>
 
-        <div className="mx-auto mt-16 grid max-w-3xl gap-6 sm:grid-cols-2">
+        <div className="mx-auto mt-16 grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan, i) => (
             <motion.div
               key={plan.name}

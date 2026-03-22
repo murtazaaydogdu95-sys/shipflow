@@ -1,4 +1,4 @@
-# ShipFlow
+# CodePylot
 
 AI-powered sprint board that turns your ideas into shipped code. Just write what you want — AI structures it into stories, and agents write the code for you.
 
@@ -12,7 +12,7 @@ AI-powered sprint board that turns your ideas into shipped code. Just write what
 - **Sprint Management** — Create sprints with goals and date ranges. Assign stories to sprints. Track Planning, Active, and Completed sprint states.
 - **Sprint Analytics** — Velocity charts, burndown tracking, and completion rates across sprints powered by recharts.
 - **Billing & Plans** — Free tier (3 projects, 50 stories, 5 AI rewrites/day) and Pro tier ($19/mo — unlimited projects, stories, agent automation, GitHub integration). Lemon Squeezy integration for subscriptions.
-- **MCP Server** — Model Context Protocol server (`packages/mcp-server/`) enables Claude Code agents to interact with ShipFlow: list stories, update status, add notes, complete stories.
+- **MCP Server** — Model Context Protocol server (`packages/mcp-server/`) enables Claude Code agents to interact with CodePylot: list stories, update status, add notes, complete stories.
 - **CLI Tool** — Command-line interface (`packages/cli/`) for managing stories: list, view, create, move, note, complete. Uses API key auth.
 - **Dark Mode** — Full dark/light theme support via next-themes with system preference detection.
 - **Auth** — GitHub OAuth, Google OAuth, credentials login with password hashing (bcrypt), and 2FA/TOTP support via NextAuth v5. JWT sessions.
@@ -54,7 +54,7 @@ AI-powered sprint board that turns your ideas into shipped code. Just write what
 - **Daily Standup Summary** — AI-generated standup summary with completed, in-progress, blocked, and needs-review stories. Copy-to-clipboard for Slack/Discord.
 - **Recurring Stories** — Schedule repeating stories (daily, weekly, monthly) via cron. Configure in project settings. Cron endpoint: `POST /api/cron/recurring`.
 - **Mobile PWA** — Web App Manifest for installability on mobile. Standalone display mode, theme color, app icons.
-- **Browser Extension** — Chrome extension (`packages/browser-extension/`) for quick story capture from any webpage. Right-click "Send to ShipFlow" context menu. Options page for API config.
+- **Browser Extension** — Chrome extension (`packages/browser-extension/`) for quick story capture from any webpage. Right-click "Send to CodePylot" context menu. Options page for API config.
 
 ## Quick Start (Docker)
 
@@ -68,7 +68,7 @@ docker compose up --build
 open http://localhost:3000
 ```
 
-This starts PostgreSQL, Ollama (with llama3.2), and ShipFlow.
+This starts PostgreSQL, Ollama (with llama3.2), and CodePylot.
 
 **GitHub OAuth:** To enable GitHub login and repo import, set `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` in your `.env` file. The `.env` file is required by Docker Compose (`env_file`).
 
@@ -76,7 +76,7 @@ This starts PostgreSQL, Ollama (with llama3.2), and ShipFlow.
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  PostgreSQL │◄────│   ShipFlow   │────►│   Ollama    │
+│  PostgreSQL │◄────│   CodePylot   │────►│   Ollama    │
 │  :5432      │     │   :3000      │     │   :11434    │
 └─────────────┘     └──────────────┘     └─────────────┘
    pgdata              repos_data          ollama_data
@@ -94,7 +94,7 @@ docker compose up --build       # Build and start all services
 docker compose up -d            # Start in background
 docker compose down             # Stop all services (data persists)
 docker compose down -v          # Stop and delete all data (clean slate)
-docker compose logs shipflow    # View app logs
+docker compose logs codepylot    # View app logs
 docker compose up postgres -d   # Start only PostgreSQL (for local dev)
 ```
 
@@ -122,7 +122,7 @@ The app runs on `http://localhost:3000`. Sign in with GitHub, Google, or email/p
 ## Environment Variables
 
 ```
-DATABASE_URL="postgresql://shipflow:shipflow@localhost:5432/shipflow"  # PostgreSQL
+DATABASE_URL="postgresql://codepylot:codepylot@localhost:5432/codepylot"  # PostgreSQL
 AUTH_SECRET="<openssl rand -base64 32>"  # NextAuth secret (required)
 AUTH_GITHUB_ID=""                        # GitHub OAuth app ID
 AUTH_GITHUB_SECRET=""                    # GitHub OAuth app secret
@@ -131,7 +131,7 @@ AUTH_GOOGLE_SECRET=""                    # Google OAuth client secret
 AUTH_TRUST_HOST=true                     # NextAuth trust host
 ANTHROPIC_API_KEY=""                     # Anthropic API key (for AI story rewrite)
 OLLAMA_URL="http://localhost:11434/v1"   # Ollama URL (http://ollama:11434/v1 in Docker)
-SHIPFLOW_REPOS_DIR=""                    # GitHub import clone dir (default: ~/.shipflow/repos, /app/repos in Docker)
+CODEPYLOT_REPOS_DIR=""                    # GitHub import clone dir (default: ~/.codepylot/repos, /app/repos in Docker)
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 RESEND_API_KEY=""                        # Resend API key (for email notifications)
 CRON_SECRET=""                           # Secret for cron endpoints (/api/cron/*)
@@ -160,6 +160,8 @@ UPSTASH_REDIS_REST_TOKEN=""              # Upstash Redis token (for distributed 
 - **Password Hashing:** bcryptjs
 - **2FA:** otpauth + qrcode
 - **Markdown:** react-markdown
+- **Unit Testing:** Vitest + @testing-library/react (454 tests)
+- **E2E Testing:** Playwright (71 tests, Chromium, `page.route()` mocking)
 
 ## Commands
 
@@ -169,20 +171,104 @@ UPSTASH_REDIS_REST_TOKEN=""              # Upstash Redis token (for distributed 
 | `npm run build` | Production build |
 | `npm run start` | Run production server |
 | `npm run lint` | ESLint |
+| `npm run test` | Run unit/integration tests (Vitest) |
+| `npm run test:e2e` | Run E2E tests (Playwright) |
+| `npm run test:e2e:ui` | Run E2E tests with Playwright UI |
+| `npm run test:e2e:headed` | Run E2E tests in headed browser |
+| `npm run test:e2e:report` | Open Playwright HTML report |
 | `npx prisma db push` | Push schema changes to PostgreSQL |
 | `npx prisma studio` | Open Prisma Studio GUI |
+
+## Testing
+
+### Unit & Integration Tests (Vitest)
+
+454 tests across 24 files. Run with `npm run test` (uses `vitest`). Config: `vitest.config.ts`.
+
+- Tests live alongside source files as `*.test.ts` / `*.test.tsx`
+- Uses `@testing-library/react` for component tests
+- Test setup: `src/test/setup.ts`
+
+### E2E Tests (Playwright)
+
+71 tests across 12 spec files. Run with `npm run test:e2e`. Config: `playwright.config.ts`.
+
+**Architecture:**
+- Tests run against the Next.js dev server on port 3001 connected to a seeded test PostgreSQL (`codepylot_test` DB)
+- `page.route()` intercepts client-side API calls for write operations (no MSW)
+- GET/read requests pass through to the real seeded DB; only writes are mocked
+- Auth handled via Playwright's `storageState` — `e2e/auth.setup.ts` logs in once, saves JWT cookie
+- `NEXT_TEST_MODE=1` env var uses a separate `.next-test/` build dir to avoid lock conflicts
+
+**Structure:**
+```
+e2e/
+├── auth.setup.ts                    # One-time login, saves auth state
+├── global-setup.ts                  # Runs DB seed before all tests
+├── seed-test-db.ts                  # Seeds test user, org, project, stories, sprints
+├── fixtures/
+│   ├── auth.fixture.ts              # authenticatedPage fixture (pre-authed page)
+│   ├── test-data.ts                 # Shared constants (TEST_PROJECT, TEST_STORIES, etc.)
+│   └── api-handlers.ts             # Reusable route mock helpers (setupBoardHandlers, etc.)
+├── helpers/
+│   └── page-objects/
+│       ├── board.page.ts            # Board navigation, columns, story cards
+│       ├── quick-capture.page.ts    # Cmd+K → Create Story flow
+│       ├── story-modal.page.ts      # Story detail sheet interactions
+│       ├── settings.page.ts         # Project settings page
+│       └── sprints.page.ts          # Sprint management page
+├── auth.spec.ts                     # Login, session persistence, logout (7 tests)
+├── dashboard.spec.ts                # Project list, create project (5 tests)
+├── board.spec.ts                    # Columns, cards, drag-drop, keyboard nav (8 tests)
+├── quick-capture.spec.ts            # Quick capture dialog, templates (6 tests)
+├── ai-rewrite.spec.ts               # AI rewrite flow, error handling (6 tests)
+├── story-detail.spec.ts             # Story modal, edit, tabs (9 tests)
+├── comments.spec.ts                 # Comment CRUD (4 tests)
+├── sprints.spec.ts                  # Sprint list, create, status (5 tests)
+├── bulk-operations.spec.ts          # Bulk select, move, delete (7 tests)
+├── agent.spec.ts                    # Agent trigger, logs, revert (5 tests)
+├── export.spec.ts                   # CSV/JSON export (3 tests)
+└── settings.spec.ts                 # Project settings, webhooks (6 tests)
+```
+
+**Key conventions:**
+- Page objects use `data-testid` attributes for reliable selectors (e.g., `story-card-{shortId}`, `board-column-{status}`)
+- Page objects include error boundary retry logic for dev server resilience
+- `makeStory()` factory in `test-data.ts` creates mock stories matching the API shape
+- Radix UI portals (Select, Sheet) need special handling: use `element.evaluate((el) => el.click())` for DOM-level click when elements render outside viewport
+- Use `.first()` when `getByRole("option")` might match both the option and inner span (Radix strict mode)
+- Scope `getByText()` to a container (e.g., `modal.sheet.getByText()`) to avoid matching header/sidebar elements
+
+**data-testid attributes** (added to source components for E2E selectors):
+
+| Component | Element | `data-testid` |
+|-----------|---------|---------------|
+| Login page | email/password/submit/github | `login-email`, `login-password`, `login-submit`, `login-github` |
+| Board column | column container | `board-column-{STATUS}` |
+| Story card | card root | `story-card-{shortId}` |
+| Kanban board | export button | `board-export-btn` |
+| Kanban board | bulk toggle | `board-bulk-toggle` |
+| Kanban board | icebox toggle | `board-icebox-toggle` |
+| Quick capture | textarea/rewrite/create | `quick-capture-input`, `rewrite-ai-btn`, `quick-capture-create-btn` |
+| Story detail | title/save/comment input/submit | `story-detail-title`, `story-detail-save`, `story-detail-comment-input`, `story-detail-comment-submit` |
+| Sprint manager | create button | `create-sprint-btn` |
+| Settings page | project name/save/auto-assign/webhook | `settings-project-name`, `settings-save-btn`, `settings-auto-assign`, `webhook-url-input`, `webhook-add-btn` |
 
 ## Project Structure
 
 ```
-ShipFlow/
+CodePylot/
+├── e2e/                         # Playwright E2E tests (71 tests, 12 spec files)
+│   ├── fixtures/                # Auth fixture, test data, API mock handlers
+│   ├── helpers/page-objects/    # Page objects (board, settings, sprints, etc.)
+│   └── *.spec.ts                # Test specs (auth, board, comments, etc.)
 ├── prisma/
 │   ├── schema.prisma            # Database schema (all models)
 │   └── seed.ts                  # Database seeder
 ├── packages/
 │   ├── mcp-server/              # MCP server for Claude Code integration
 │   │   └── src/index.ts
-│   ├── cli/                     # CLI tool (shipflow command)
+│   ├── cli/                     # CLI tool (codepylot command)
 │   │   └── src/index.ts
 │   └── browser-extension/       # Chrome extension for quick capture
 │       ├── manifest.json        # Chrome Manifest V3
@@ -292,12 +378,14 @@ ShipFlow/
 │   │   └── validations/             # Zod schemas (story, project, sprint, webhook, comment, recurring)
 │   ├── types/index.ts               # TypeScript types & constants
 │   └── middleware.ts                # Auth middleware + rate limiting + 2FA redirect
+├── vitest.config.ts             # Vitest config (unit/integration tests)
+├── playwright.config.ts         # Playwright config (E2E tests)
 ├── CHANGELOG.md                 # Project changelog
 ├── .github/
 │   └── workflows/
 │       └── ci.yml               # GitHub Actions CI/CD (lint, build, Docker deploy to VPS)
 ├── Dockerfile                   # Multi-stage build (deps → builder → runner)
-├── docker-compose.yml           # PostgreSQL + Ollama + ShipFlow (local dev)
+├── docker-compose.yml           # PostgreSQL + Ollama + CodePylot (local dev)
 ├── docker-compose.prod.yml      # Production compose for VPS (pulls pre-built image from GHCR)
 ├── docker-entrypoint.sh         # Wait for DB, push schema, seed, start
 ├── .dockerignore
@@ -367,7 +455,7 @@ Configure a project's working directory and API key in Settings. Enable auto-ass
 
 1. Agent picks highest-priority unblocked TODO story (respects dependency blockers)
 2. Creates a branch: `{type-prefix}/{shortId}-{slug}` (e.g., `feat/SF-001-login-page`)
-3. Spawns Claude Code CLI with MCP config pointing to ShipFlow
+3. Spawns Claude Code CLI with MCP config pointing to CodePylot
 4. Agent implements the story, calling MCP tools to update status
 5. On completion, story moves to REVIEW and a dev preview starts
 6. View live agent logs in the story detail modal
@@ -395,7 +483,7 @@ The agent system (`src/lib/agent-trigger.ts`) manages autonomous Claude Code age
 - **Branch prefixes** by story type: feature→`feat/`, bug→`bug/`, chore→`chore/`, refactor→`refactor/`, docs→`docs/`, test→`test/`
 - **Commit prefixes** by story type: feature→`feat`, bug→`fix`, chore→`chore`, refactor→`refactor`, docs→`docs`, test→`test`
 - **MCP tools** available to agent: `list_stories`, `get_story`, `get_next_story`, `update_story_status`, `complete_story`, `add_note`
-- **Logs:** Agent output written to `/tmp/shipflow-agent-{storyId}.log`. Viewable in story detail modal via `/api/projects/[projectId]/stories/[storyId]/logs`.
+- **Logs:** Agent output written to `/tmp/codepylot-agent-{storyId}.log`. Viewable in story detail modal via `/api/projects/[projectId]/stories/[storyId]/logs`.
 - **Preview:** Auto-starts `npx next dev` on a free port after agent completes. Proxied through `/api/preview/[storyId]/` with HTML URL rewriting (`/_next/` → proxy path) and redirect interception (`redirect: "manual"` + Location header rewriting).
 - **Revert:** `POST /api/projects/[projectId]/stories/[storyId]/revert` deletes the agent branch and resets the story.
 - **AI Review:** Auto-triggered on agent completion. Scores code 0-100 with issue-by-issue breakdown.
@@ -462,9 +550,9 @@ npm install && npm run build
 
 Environment for MCP server:
 ```
-SHIPFLOW_API_URL=http://localhost:3000
-SHIPFLOW_API_KEY=<project-api-key>
-SHIPFLOW_PROJECT_ID=<project-id>
+CODEPYLOT_API_URL=http://localhost:3000
+CODEPYLOT_API_KEY=<project-api-key>
+CODEPYLOT_PROJECT_ID=<project-id>
 ```
 
 The MCP server is automatically configured when the agent trigger system spawns Claude Code.
@@ -480,12 +568,12 @@ npm install && npm run build
 
 Environment for CLI:
 ```
-SHIPFLOW_API_URL=http://localhost:3000
-SHIPFLOW_API_KEY=<project-api-key>
-SHIPFLOW_PROJECT_ID=<project-id>
+CODEPYLOT_API_URL=http://localhost:3000
+CODEPYLOT_API_KEY=<project-api-key>
+CODEPYLOT_PROJECT_ID=<project-id>
 ```
 
-Commands: `shipflow stories`, `shipflow story <id>`, `shipflow create "title"`, `shipflow move <id> <status>`, `shipflow note <id> "msg"`, `shipflow complete <id>`
+Commands: `codepylot stories`, `codepylot story <id>`, `codepylot create "title"`, `codepylot move <id> <status>`, `codepylot note <id> "msg"`, `codepylot complete <id>`
 
 ## CI/CD & Deployment
 
@@ -499,7 +587,7 @@ Commands: `shipflow stories`, `shipflow story <id>`, `shipflow create "title"`, 
 ### VPS Production Deployment (`docker-compose.prod.yml`)
 
 - Uses pre-built image from GHCR (no building on VPS)
-- ShipFlow on port 3001 (behind Caddy reverse proxy)
+- CodePylot on port 3001 (behind Caddy reverse proxy)
 - PostgreSQL with env-based password
 - Automatic daily database backups
 

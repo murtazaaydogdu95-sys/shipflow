@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
+import { PLAN_LIMITS } from "@/lib/paddle";
 
 type LimitResult = { allowed: true } | { allowed: false; message: string };
 
@@ -64,15 +64,20 @@ export async function checkRewriteLimit(
 
   const plan = await resolvePlan(project?.orgId, userId);
   const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.FREE;
-  const limit = limits.maxAIRewritesPerDay;
+  const limit = limits.maxAIRewritesPerMonth;
 
   if (hasByok) {
     return { allowed: true, used: 0, limit, remaining: limit };
   }
 
-  // Count STORY_REWRITTEN activities today across org projects
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  if (limit === Infinity) {
+    return { allowed: true, used: 0, limit, remaining: Infinity };
+  }
+
+  // Count STORY_REWRITTEN activities this month (from 1st of month UTC) across org projects
+  const startOfMonth = new Date();
+  startOfMonth.setUTCDate(1);
+  startOfMonth.setUTCHours(0, 0, 0, 0);
 
   let projectIds: string[];
   if (project?.orgId) {
@@ -89,7 +94,7 @@ export async function checkRewriteLimit(
     where: {
       projectId: { in: projectIds },
       type: "STORY_REWRITTEN",
-      createdAt: { gte: startOfDay },
+      createdAt: { gte: startOfMonth },
     },
   });
 
@@ -101,11 +106,37 @@ export async function checkRewriteLimit(
       used,
       limit,
       remaining: 0,
-      message: `You've used all ${limit} AI rewrites for today. ${plan === "FREE" ? "Upgrade to Pro for 50/day, or add your own API key for unlimited rewrites." : "Add your own API key in Project Settings for unlimited rewrites."}`,
+      message: `You've used all ${limit} AI rewrites for this month. ${plan === "FREE" ? "Upgrade to Pro for 50/month, or add your own API key for unlimited rewrites." : "Add your own API key in Project Settings for unlimited rewrites."}`,
     };
   }
 
   return { allowed: true, used, limit, remaining };
+}
+
+/**
+ * Check story limit using only the project's org (for API key auth where no userId is available).
+ */
+export async function checkStoryLimitByProject(projectId: string): Promise<LimitResult> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true },
+  });
+
+  const plan = await resolvePlan(project?.orgId);
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.FREE;
+
+  if (limits.maxStoriesPerProject === Infinity) return { allowed: true };
+
+  const count = await prisma.story.count({ where: { projectId } });
+
+  if (count >= limits.maxStoriesPerProject) {
+    return {
+      allowed: false,
+      message: `Free plan allows up to ${limits.maxStoriesPerProject} stories per project. Upgrade to Pro for unlimited stories.`,
+    };
+  }
+
+  return { allowed: true };
 }
 
 export async function checkStoryLimit(projectId: string, userId: string): Promise<LimitResult> {

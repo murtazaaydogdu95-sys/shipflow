@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 
 // Lightweight in-memory sliding-window rate limiter for Edge middleware.
-const hits = new Map<string, number[]>();
+// Uses globalThis to survive Edge Runtime module re-evaluations in dev.
+const globalHits = (globalThis as Record<string, unknown>).__edgeRateLimitHits as Map<string, number[]> | undefined;
+const hits = globalHits ?? new Map<string, number[]>();
+(globalThis as Record<string, unknown>).__edgeRateLimitHits = hits;
+
 function edgeRateLimit(key: string, maxReqs: number, windowMs: number): { allowed: boolean; resetAt: number } {
   const now = Date.now();
   const timestamps = (hits.get(key) || []).filter((t) => now - t < windowMs);
@@ -15,12 +19,31 @@ function edgeRateLimit(key: string, maxReqs: number, windowMs: number): { allowe
   return { allowed: true, resetAt: now + windowMs };
 }
 
+/**
+ * Extract client IP safely. Only trusts platform-provided headers that
+ * cannot be spoofed by clients (x-real-ip on Vercel/Caddy).
+ * X-Forwarded-For is NOT trusted as clients can freely set it to bypass rate limits.
+ */
+function getClientIp(req: NextRequest): string {
+  // x-real-ip is set by the platform (Vercel) or reverse proxy (Caddy/nginx)
+  // and cannot be spoofed by end clients
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+
+  // Next.js req.ip is set by the platform (Vercel, etc.) — safe to trust
+  if (req.ip) return req.ip;
+
+  // Do NOT trust x-forwarded-for — it can be spoofed by clients.
+  // In local dev without a reverse proxy, all requests share one bucket.
+  return "unknown";
+}
+
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Rate limit auth API calls (exclude session check)
   if (pathname.startsWith("/api/auth") && !pathname.startsWith("/api/auth/session")) {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const ip = getClientIp(req);
     const result = edgeRateLimit(`auth:${ip}`, 10, 60_000);
     if (!result.allowed) {
       return NextResponse.json(
@@ -32,7 +55,7 @@ export default async function middleware(req: NextRequest) {
 
   // API-wide rate limiting (exclude /api/auth and /api/health)
   if (pathname.startsWith("/api/") && !pathname.startsWith("/api/auth") && !pathname.startsWith("/api/health")) {
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const ip = getClientIp(req);
     const result = edgeRateLimit(`api:${ip}`, 60, 60_000);
     if (!result.allowed) {
       return NextResponse.json(

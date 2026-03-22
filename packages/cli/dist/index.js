@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 "use strict";
-const API_URL = process.env.SHIPFLOW_API_URL || "http://localhost:3000";
-const API_KEY = process.env.SHIPFLOW_API_KEY;
-const PROJECT_ID = process.env.SHIPFLOW_PROJECT_ID;
+const API_URL = process.env.CODEPYLOT_API_URL || "http://localhost:3000";
+const API_KEY = process.env.CODEPYLOT_API_KEY;
+const PROJECT_ID = process.env.CODEPYLOT_PROJECT_ID;
 function headers() {
     const h = { "Content-Type": "application/json" };
     if (API_KEY)
@@ -88,27 +88,27 @@ async function completeStory(shortIdOrId) {
 }
 function usage() {
     console.log(`
-ShipFlow CLI
+Codepylot CLI
 
 Usage:
-  shipflow stories                    List all stories
-  shipflow story <id>                 Get story details
-  shipflow create "<title>"           Create a new story
-  shipflow move <id> <status>         Move story to status
-  shipflow note <id> "<message>"      Add a note to a story
-  shipflow complete <id>              Mark story as DONE
+  codepylotstories                    List all stories
+  codepylotstory <id>                 Get story details
+  codepylotcreate "<title>"           Create a new story
+  codepylotmove <id> <status>         Move story to status
+  codepylotnote <id> "<message>"      Add a note to a story
+  codepylotcomplete <id>              Mark story as DONE
 
 Environment:
-  SHIPFLOW_API_URL       API base URL (default: http://localhost:3000)
-  SHIPFLOW_API_KEY       Project API key
-  SHIPFLOW_PROJECT_ID    Project ID
+  CODEPYLOT_API_URL       API base URL (default: http://localhost:3000)
+  CODEPYLOT_API_KEY       Project API key
+  CODEPYLOT_PROJECT_ID    Project ID
 `);
 }
 async function main() {
     const args = process.argv.slice(2);
     const cmd = args[0];
     if (!PROJECT_ID) {
-        console.error("SHIPFLOW_PROJECT_ID is required");
+        console.error("CODEPYLOT_PROJECT_ID is required");
         process.exit(1);
     }
     switch (cmd) {

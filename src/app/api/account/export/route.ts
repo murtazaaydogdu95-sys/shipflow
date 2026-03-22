@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   if (searchParams.get("meta") === "true") {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { plan: true, lemonSqueezyCustomerId: true },
+      select: { plan: true, paddleCustomerId: true },
     });
     return NextResponse.json(user);
   }
@@ -68,7 +68,7 @@ export async function GET(req: Request) {
   return new NextResponse(JSON.stringify(exportData, null, 2), {
     headers: {
       "Content-Type": "application/json",
-      "Content-Disposition": `attachment; filename="shipflow-data-export.json"`,
+      "Content-Disposition": `attachment; filename="codepylot-data-export.json"`,
     },
   });
 }

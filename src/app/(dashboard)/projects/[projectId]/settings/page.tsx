@@ -215,13 +215,13 @@ export default function SettingsPage() {
   const mcpConfig = JSON.stringify(
     {
       mcpServers: {
-        shipflow: {
+        codepylot: {
           command: "node",
-          args: ["path/to/shipflow-mcp/dist/index.js"],
+          args: ["path/to/codepylot-mcp/dist/index.js"],
           env: {
-            SHIPFLOW_API_URL: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
-            SHIPFLOW_API_KEY: project.hasApiKey ? project.apiKeyPrefix : "<generate-an-api-key>",
-            SHIPFLOW_PROJECT_ID: projectId,
+            CODEPYLOT_API_URL: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+            CODEPYLOT_API_KEY: project.hasApiKey ? project.apiKeyPrefix : "<generate-an-api-key>",
+            CODEPYLOT_PROJECT_ID: projectId,
           },
         },
       },
@@ -248,6 +248,7 @@ export default function SettingsPage() {
               value={project.name}
               onChange={(e) => setProject({ ...project, name: e.target.value })}
               className="mt-1"
+              data-testid="settings-project-name"
             />
           </div>
           <div>
@@ -276,7 +277,7 @@ export default function SettingsPage() {
               className="mt-1"
             />
           </div>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving} data-testid="settings-save-btn">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Changes
           </Button>
@@ -350,7 +351,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Claude Code Integration</CardTitle>
           <CardDescription>
-            Connect Claude Code to ShipFlow via MCP server
+            Connect Claude Code to Codepylot via MCP server
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -480,6 +481,7 @@ export default function SettingsPage() {
               onCheckedChange={(checked) =>
                 setProject({ ...project, agentAutoAssign: checked })
               }
+              data-testid="settings-auto-assign"
             />
           </div>
           <div>
@@ -560,8 +562,9 @@ export default function SettingsPage() {
               value={newWebhookUrl}
               onChange={(e) => setNewWebhookUrl(e.target.value)}
               className="flex-1"
+              data-testid="webhook-url-input"
             />
-            <Button onClick={handleAddWebhook} disabled={webhookLoading || !newWebhookUrl}>
+            <Button onClick={handleAddWebhook} disabled={webhookLoading || !newWebhookUrl} data-testid="webhook-add-btn">
               <Plus className="mr-1 h-4 w-4" />
               Add
             </Button>

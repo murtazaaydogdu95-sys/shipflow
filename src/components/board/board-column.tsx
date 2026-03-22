@@ -31,6 +31,7 @@ export function BoardColumn({ id, title, stories, onStoryClick, onStoryDelete }:
 
   return (
     <div
+      data-testid={`board-column-${id}`}
       className={cn(
         "flex flex-col w-72 min-w-[288px] bg-muted/30 rounded-xl",
         isOver && "ring-2 ring-primary/50"

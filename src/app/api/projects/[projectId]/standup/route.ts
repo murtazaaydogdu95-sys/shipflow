@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
+import { safeDecrypt } from "@/lib/encryption";
 
 export async function GET(
   req: Request,
@@ -58,10 +59,11 @@ export async function GET(
   }
 
   const provider = project.aiProvider || "ollama";
+  const decryptedAiKey = safeDecrypt(project.aiApiKey);
   const apiKey =
     provider === "ollama"
       ? undefined
-      : project.aiApiKey ||
+      : decryptedAiKey ||
         (provider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined);
 
   // Build summary data

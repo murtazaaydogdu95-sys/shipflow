@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { checkRewriteLimit } from "@/lib/plan-limits";
 import { prisma } from "@/lib/prisma";
+import { safeDecrypt } from "@/lib/encryption";
 
 export async function GET(
   req: Request,
@@ -17,7 +18,8 @@ export async function GET(
   });
 
   const provider = project?.aiProvider || "ollama";
-  const hasByok = !!(project?.aiApiKey && provider !== "ollama");
+  const decryptedAiKey = safeDecrypt(project?.aiApiKey);
+  const hasByok = !!(decryptedAiKey && provider !== "ollama");
 
   if (hasByok) {
     return NextResponse.json({ used: 0, limit: null, remaining: null, unlimited: true });

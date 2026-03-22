@@ -22,5 +22,5 @@ echo "PostgreSQL is ready!"
 echo "Running prisma db push..."
 npx prisma db push --skip-generate
 
-echo "Starting ShipFlow..."
+echo "Starting Codepylot..."
 exec node server.js

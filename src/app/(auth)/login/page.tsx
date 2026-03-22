@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import posthog from "posthog-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,14 +22,18 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Rocket className="h-6 w-6" />
           </div>
-          <CardTitle className="text-2xl">ShipFlow</CardTitle>
+          <CardTitle className="text-2xl">Codepylot</CardTitle>
           <CardDescription>Think it. Ship it.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => signIn("github", { callbackUrl: "/dashboard" })}
+            data-testid="login-github"
+            onClick={() => {
+              posthog.capture("login", { provider: "github" });
+              signIn("github", { callbackUrl: "/dashboard" });
+            }}
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
               <path
@@ -42,7 +47,10 @@ export default function LoginPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+              onClick={() => {
+                posthog.capture("login", { provider: "google" });
+                signIn("google", { callbackUrl: "/dashboard" });
+              }}
             >
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                 <path
@@ -78,6 +86,7 @@ export default function LoginPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              posthog.capture("login", { provider: "credentials" });
               signIn("credentials", { email, password, callbackUrl: "/dashboard" });
             }}
             className="space-y-2"
@@ -88,6 +97,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              data-testid="login-email"
             />
             <Input
               type="password"
@@ -95,8 +105,9 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              data-testid="login-password"
             />
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full" data-testid="login-submit">
               Sign In
             </Button>
           </form>

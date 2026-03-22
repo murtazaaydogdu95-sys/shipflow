@@ -142,11 +142,87 @@ async function proxyRequest(
       headers: responseHeaders,
     });
   } catch {
-    // Preview server is dead — clear stale state so UI stops showing the link
+    // Preview server is dead — clear stale state and try to restart
     await prisma.story.updateMany({
       where: { shortId: storyId, previewPort: { not: null } },
       data: { previewPort: null, previewPid: null },
     });
+
+    // Auto-restart if the story has a branch (agent work)
+    if (story.branchName && story.projectId) {
+      try {
+        const result = await startPreview(story.id, story.projectId);
+        // Retry the proxied request with the new port
+        const retryUrl = new URL(targetPath, `http://localhost:${result.port}`);
+        retryUrl.search = req.nextUrl.search;
+        const retryHeaders = new Headers(req.headers);
+        retryHeaders.set("host", `localhost:${result.port}`);
+        retryHeaders.delete("x-forwarded-host");
+        retryHeaders.delete("accept-encoding");
+
+        const retryOptions: RequestInit = {
+          method: req.method,
+          headers: retryHeaders,
+          redirect: "manual",
+        };
+        if (req.method !== "GET" && req.method !== "HEAD") {
+          retryOptions.body = req.body;
+          // @ts-expect-error duplex is required for streaming request bodies
+          retryOptions.duplex = "half";
+        }
+
+        const retryResponse = await fetch(retryUrl.toString(), retryOptions);
+        const retryResponseHeaders = new Headers(retryResponse.headers);
+        retryResponseHeaders.delete("transfer-encoding");
+        retryResponseHeaders.delete("content-encoding");
+
+        const retryBasePath = `/api/preview/${storyId}`;
+        const retryLocation = retryResponseHeaders.get("location");
+        if (retryLocation && retryResponse.status >= 300 && retryResponse.status < 400) {
+          let rewrittenLocation = retryLocation;
+          if (retryLocation.startsWith("/")) {
+            rewrittenLocation = `${retryBasePath}${retryLocation}`;
+          } else if (retryLocation.startsWith(`http://localhost:${result.port}`)) {
+            const redirectPath = new URL(retryLocation).pathname + new URL(retryLocation).search;
+            rewrittenLocation = `${retryBasePath}${redirectPath}`;
+          }
+          retryResponseHeaders.set("location", rewrittenLocation);
+          return new NextResponse(null, {
+            status: retryResponse.status,
+            statusText: retryResponse.statusText,
+            headers: retryResponseHeaders,
+          });
+        }
+
+        const retryContentType = retryResponseHeaders.get("content-type") || "";
+        const isRetryRewritable =
+          retryContentType.includes("text/html") ||
+          retryContentType.includes("javascript") ||
+          retryContentType.includes("text/css");
+
+        if (isRetryRewritable) {
+          const text = await retryResponse.text();
+          const rewritten = text
+            .replaceAll("/_next/", `${retryBasePath}/_next/`)
+            .replaceAll("/__nextjs", `${retryBasePath}/__nextjs`);
+          retryResponseHeaders.delete("content-length");
+          return new NextResponse(rewritten, {
+            status: retryResponse.status,
+            statusText: retryResponse.statusText,
+            headers: retryResponseHeaders,
+          });
+        }
+
+        return new NextResponse(retryResponse.body, {
+          status: retryResponse.status,
+          statusText: retryResponse.statusText,
+          headers: retryResponseHeaders,
+        });
+      } catch {
+        // Restart also failed
+      }
+    }
+
     return NextResponse.json(
       { error: "Preview server is not responding. It may have stopped — try re-triggering the agent." },
       { status: 502 }

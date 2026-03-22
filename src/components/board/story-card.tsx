@@ -41,6 +41,7 @@ export function StoryCard({ story, onClick, onDelete, isDragging, isSelected, is
 
   return (
     <Card
+      data-testid={`story-card-${story.shortId}`}
       className={cn(
         "p-3 cursor-pointer hover:border-primary/50 transition-all group relative",
         isDragging && "opacity-50 rotate-2 shadow-lg",

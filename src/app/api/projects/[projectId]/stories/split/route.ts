@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
 import { parseJsonBody } from "@/lib/api-error";
+import { safeDecrypt } from "@/lib/encryption";
 
 export async function POST(
   req: Request,
@@ -30,10 +31,11 @@ export async function POST(
   }
 
   const provider = project.aiProvider || "ollama";
+  const decryptedAiKey = safeDecrypt(project.aiApiKey);
   const apiKey =
     provider === "ollama"
       ? undefined
-      : project.aiApiKey ||
+      : decryptedAiKey ||
         (provider === "anthropic" ? process.env.ANTHROPIC_API_KEY : undefined);
 
   if (provider !== "ollama" && !apiKey) {

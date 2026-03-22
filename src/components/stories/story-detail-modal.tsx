@@ -580,6 +580,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
                     className="mt-1"
+                    data-testid="story-detail-title"
                   />
                 </div>
                 <div>
@@ -588,6 +589,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                     value={editDescription}
                     onChange={(e) => setEditDescription(e.target.value)}
                     className="mt-1 min-h-[100px]"
+                    data-testid="story-detail-description"
                   />
                 </div>
 
@@ -626,7 +628,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                   <div className="flex-1">
                     <label className="text-sm font-medium">Priority</label>
                     <Select value={editPriority} onValueChange={setEditPriority}>
-                      <SelectTrigger className="mt-1">
+                      <SelectTrigger className="mt-1" data-testid="story-detail-priority">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -687,7 +689,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                 </div>
 
                 <div className="flex gap-2">
-                  <Button onClick={handleSave} disabled={saving} className="flex-1">
+                  <Button onClick={handleSave} disabled={saving} className="flex-1" data-testid="story-detail-save">
                     {saving ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -765,6 +767,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                     onChange={(e) => setCommentText(e.target.value)}
                     placeholder="Add a comment..."
                     className="min-h-[60px]"
+                    data-testid="story-detail-comment-input"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         handleAddComment();
@@ -776,6 +779,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                     onClick={handleAddComment}
                     disabled={commentLoading || !commentText.trim()}
                     className="shrink-0 self-end"
+                    data-testid="story-detail-comment-submit"
                   >
                     {commentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>

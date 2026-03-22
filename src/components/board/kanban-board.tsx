@@ -448,6 +448,7 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
             onClick={() => setShowIcebox(!showIcebox)}
             title="Toggle Someday/Icebox column"
             className="h-7 text-xs gap-1"
+            data-testid="board-icebox-toggle"
           >
             <Snowflake className="h-3.5 w-3.5" />
             Someday
@@ -458,12 +459,13 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
             onClick={() => { setBulkMode(!bulkMode); if (bulkMode) setSelectedIds(new Set()); }}
             title="Toggle bulk selection (B)"
             className="h-7 text-xs gap-1"
+            data-testid="board-bulk-toggle"
           >
             <CheckSquare className="h-3.5 w-3.5" />
             Bulk
           </Button>
           <Select onValueChange={(v) => handleExport(v as "csv" | "json")}>
-            <SelectTrigger className="h-7 w-auto gap-1 text-xs border-0 shadow-none">
+            <SelectTrigger className="h-7 w-auto gap-1 text-xs border-0 shadow-none" data-testid="board-export-btn">
               <Download className="h-3.5 w-3.5" />
               Export
             </SelectTrigger>

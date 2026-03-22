@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { parseJsonBody } from "@/lib/api-error";
-import { checkStoryLimit } from "@/lib/plan-limits";
+import { checkStoryLimit, checkStoryLimitByProject } from "@/lib/plan-limits";
 import { z } from "zod";
 
 const bulkStorySchema = z.object({
@@ -37,9 +37,14 @@ export async function POST(
   if (!parsed.ok) return parsed.response;
   const { stories } = bulkCreateSchema.parse(parsed.data);
 
-  // Check plan limits
+  // Check plan limits for all auth methods
   if (access.type === "session") {
     const limitCheck = await checkStoryLimit(projectId, access.userId);
+    if (!limitCheck.allowed) {
+      return NextResponse.json({ error: limitCheck.message }, { status: 403 });
+    }
+  } else if (access.type === "apikey") {
+    const limitCheck = await checkStoryLimitByProject(projectId);
     if (!limitCheck.allowed) {
       return NextResponse.json({ error: limitCheck.message }, { status: 403 });
     }
@@ -57,7 +62,7 @@ export async function POST(
     const results = [];
 
     for (const story of stories) {
-      const shortId = `SF-${String(seq++).padStart(3, "0")}`;
+      const shortId = `CP-${String(seq++).padStart(3, "0")}`;
       const created = await tx.story.create({
         data: {
           shortId,

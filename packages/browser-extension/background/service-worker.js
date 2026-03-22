@@ -1,21 +1,21 @@
-// Context menu: "Send to ShipFlow"
+// Context menu: "Send to Codepylot"
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
-    id: "send-to-shipflow",
-    title: "Send to ShipFlow",
+    id: "send-to-codepylot",
+    title: "Send to Codepylot",
     contexts: ["selection"],
   });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info) => {
-  if (info.menuItemId !== "send-to-shipflow") return;
+  if (info.menuItemId !== "send-to-codepylot") return;
 
   const selectedText = info.selectionText;
   if (!selectedText) return;
 
   const settings = await chrome.storage.sync.get(["apiUrl", "apiKey", "projectId"]);
   if (!settings.apiUrl || !settings.apiKey || !settings.projectId) {
-    console.error("[ShipFlow] Not configured. Open extension settings.");
+    console.error("[Codepylot] Not configured. Open extension settings.");
     return;
   }
 
@@ -35,8 +35,8 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const story = await res.json();
-    console.log(`[ShipFlow] Created story ${story.shortId}`);
+    console.log(`[Codepylot] Created story ${story.shortId}`);
   } catch (err) {
-    console.error("[ShipFlow] Failed to create story:", err.message);
+    console.error("[Codepylot] Failed to create story:", err.message);
   }
 });

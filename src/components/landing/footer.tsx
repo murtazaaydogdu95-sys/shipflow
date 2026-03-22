@@ -44,10 +44,22 @@ export function Footer() {
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground">
                 <Rocket className="h-4 w-4" />
               </div>
-              <span>ShipFlow</span>
+              <span>Codepylot</span>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+              <Link href="/tools/user-story-generator" className="transition-colors hover:text-foreground">
+                Story Generator
+              </Link>
+              <Link href="/tools/acceptance-criteria-generator" className="transition-colors hover:text-foreground">
+                AC Generator
+              </Link>
+              <Link href="/blog" className="transition-colors hover:text-foreground">
+                Blog
+              </Link>
+              <Link href="/glossary" className="transition-colors hover:text-foreground">
+                Glossary
+              </Link>
               <Link href="/roadmap" className="transition-colors hover:text-foreground">
                 Roadmap
               </Link>
@@ -74,7 +86,7 @@ export function Footer() {
             </div>
 
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} ShipFlow
+              &copy; {new Date().getFullYear()} Codepylot
             </p>
           </div>
         </div>

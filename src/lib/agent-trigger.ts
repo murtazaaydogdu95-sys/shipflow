@@ -3,6 +3,7 @@ import { writeFileSync, openSync, appendFileSync } from "fs";
 import { homedir } from "os";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import { PLAN_LIMITS } from "@/lib/paddle";
 
 export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -62,16 +63,36 @@ interface TriggerOptions {
 }
 
 /**
+ * Resolve the plan-level max concurrent agents for a project's org.
+ */
+async function resolveMaxAgents(projectId: string): Promise<number> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true, maxConcurrentAgents: true },
+  });
+
+  let planMax: number = PLAN_LIMITS.FREE.maxConcurrentAgents;
+  if (project?.orgId) {
+    const org = await prisma.organization.findUnique({
+      where: { id: project.orgId },
+      select: { plan: true },
+    });
+    const plan = (org?.plan ?? "FREE") as keyof typeof PLAN_LIMITS;
+    planMax = PLAN_LIMITS[plan]?.maxConcurrentAgents ?? PLAN_LIMITS.FREE.maxConcurrentAgents;
+  }
+
+  // Use the lower of project setting and plan limit
+  const projectMax = project?.maxConcurrentAgents ?? 1;
+  return Math.min(projectMax, planMax);
+}
+
+/**
  * Check if agent slots are available for this project.
- * Counts active agents (RUNNING + QUEUED) and compares to maxConcurrentAgents.
+ * Counts active agents (RUNNING + QUEUED) and compares to plan-aware maxConcurrentAgents.
  * REVIEW stories no longer block the queue.
  */
 async function isQueueBlocked(projectId: string): Promise<boolean> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { maxConcurrentAgents: true },
-  });
-  const maxAgents = project?.maxConcurrentAgents ?? 1;
+  const maxAgents = await resolveMaxAgents(projectId);
 
   const activeCount = await prisma.story.count({
     where: {
@@ -90,11 +111,7 @@ async function isQueueBlocked(projectId: string): Promise<boolean> {
  * isQueueBlocked() and exceed the limit.
  */
 async function claimAgentSlot(storyId: string, projectId: string): Promise<boolean> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { maxConcurrentAgents: true },
-  });
-  const maxAgents = project?.maxConcurrentAgents ?? 1;
+  const maxAgents = await resolveMaxAgents(projectId);
 
   // Use a serializable transaction to atomically check count + claim slot
   try {
@@ -169,6 +186,9 @@ async function findNextStory(projectId: string) {
     (a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3)
   );
 
+  // PRO_MAX priority queue: if enabled, always pick the highest priority story
+  // (already sorted by priority above, so the first element is highest priority)
+  // For non-priority-queue plans, behavior is the same — priority then creation date
   return unblocked[0];
 }
 
@@ -352,16 +372,16 @@ async function spawnAgent({ storyId, projectId, feedback }: { storyId: string; p
   const branchName = await ensureBranch(story, project.agentWorkingDir);
 
   // Build MCP config
-  const configPath = `/tmp/shipflow-mcp-${storyId}.json`;
+  const configPath = `/tmp/codepylot-mcp-${storyId}.json`;
   const mcpConfig = {
     mcpServers: {
-      shipflow: {
+      codepylot: {
         command: "node",
         args: [path.resolve(process.cwd(), "packages/mcp-server/dist/index.js")],
         env: {
-          SHIPFLOW_API_URL: process.env.NEXTAUTH_URL || "http://localhost:3000",
-          SHIPFLOW_API_KEY: project.apiKey,
-          SHIPFLOW_PROJECT_ID: projectId,
+          CODEPYLOT_API_URL: process.env.NEXTAUTH_URL || "http://localhost:3000",
+          CODEPYLOT_API_KEY: project.apiKey,
+          CODEPYLOT_PROJECT_ID: projectId,
         },
       },
     },
@@ -416,7 +436,7 @@ async function spawnAgent({ storyId, projectId, feedback }: { storyId: string; p
   const fullPath = `${process.env.PATH || ""}:${extraPath}`;
 
   // Spawn detached claude process with output logging
-  const logPath = `/tmp/shipflow-agent-${storyId}.log`;
+  const logPath = `/tmp/codepylot-agent-${storyId}.log`;
   const logFd = openSync(logPath, "w");
 
   console.log(`[agent-trigger] spawning: ${claudeBin} for ${story.shortId} in ${project.agentWorkingDir}`);

@@ -1,6 +1,6 @@
 {
-  "name": "ShipFlow",
-  "short_name": "ShipFlow",
+  "name": "Codepylot",
+  "short_name": "Codepylot",
   "description": "AI-powered sprint board for solo developers",
   "start_url": "/dashboard",
   "display": "standalone",

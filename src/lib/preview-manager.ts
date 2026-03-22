@@ -1,14 +1,17 @@
 import { spawn, execFileSync } from "child_process";
 import fs from "fs";
+import path from "path";
 import net from "net";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Poll a port with TCP connect until it accepts connections.
+ * Poll a port until the dev server responds to HTTP requests.
+ * TCP accept alone is not enough — Next.js accepts sockets before it can serve.
  * Throws if not ready within timeoutMs.
  */
-async function waitForPort(port: number, timeoutMs = 30000): Promise<void> {
+async function waitForPort(port: number, timeoutMs = 60000): Promise<void> {
   const start = Date.now();
+  // Phase 1: wait for TCP accept
   while (Date.now() - start < timeoutMs) {
     try {
       await new Promise<void>((resolve, reject) => {
@@ -17,9 +20,22 @@ async function waitForPort(port: number, timeoutMs = 30000): Promise<void> {
         socket.once("error", reject);
         socket.setTimeout(1000, () => { socket.destroy(); reject(new Error("timeout")); });
       });
-      return; // connected
+      break; // TCP connected
     } catch {
       await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  // Phase 2: wait for HTTP readiness
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/`, {
+        signal: AbortSignal.timeout(3000),
+        redirect: "manual",
+      });
+      // Any HTTP response (even 404 or redirect) means the server is ready
+      if (res.status > 0) return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error(`Dev server not ready on port ${port} after ${timeoutMs}ms`);
@@ -85,11 +101,38 @@ export async function startPreview(storyId: string, projectId: string): Promise<
     console.warn("[preview-manager] npm install failed, continuing anyway");
   }
 
-  // Open a log file for preview server output
-  const logPath = `/tmp/shipflow-preview-${storyId}.log`;
-  const logFd = fs.openSync(logPath, "a");
+  // Stop any existing preview for this story to avoid zombie processes
+  // and .next/dev/lock conflicts.
+  await stopPreview(storyId);
 
-  // Spawn Next.js dev server detached, piping stderr/stdout to log file
+  // Also kill any stale next dev processes holding the lock in this working dir.
+  // This handles cases where a previous preview's PID was lost from the DB.
+  try {
+    const lsofOutput = execFileSync("lsof", ["+D", path.join(cwd, ".next", "dev")], {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
+    // Extract PIDs from lsof output (skip header line)
+    for (const line of lsofOutput.split("\n").slice(1)) {
+      const pid = parseInt(line.split(/\s+/)[1], 10);
+      if (pid && !isNaN(pid)) {
+        try { process.kill(pid, "SIGTERM"); } catch { /* already dead */ }
+      }
+    }
+  } catch { /* no lock holders or lsof failed */ }
+
+  // Remove stale .next/dev/lock after killing zombies
+  const lockPath = path.join(cwd, ".next", "dev", "lock");
+  try { fs.unlinkSync(lockPath); } catch { /* no lock file, fine */ }
+
+  // Brief pause to let OS release the lock file and processes terminate
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // Open a log file for preview server output (truncate previous logs)
+  const logPath = `/tmp/codepylot-preview-${storyId}.log`;
+  const logFd = fs.openSync(logPath, "w");
+
+  // Spawn Next.js dev server detached, piping stderr/stdout to log file.
   const child = spawn("npx", ["next", "dev", "--port", String(port)], {
     detached: true,
     stdio: ["ignore", logFd, logFd],

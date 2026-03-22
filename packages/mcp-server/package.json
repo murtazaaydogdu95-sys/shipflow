@@ -1,10 +1,10 @@
 {
-  "name": "@shipflow/mcp-server",
+  "name": "@codepylot/mcp-server",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "shipflow-mcp": "dist/index.js"
+    "codepylot-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

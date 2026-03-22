@@ -1,9 +1,9 @@
 {
-  "name": "@shipflow/cli",
+  "name": "@codepylot/cli",
   "version": "1.0.0",
-  "description": "ShipFlow CLI — manage stories from your terminal",
+  "description": "Codepylot CLI — manage stories from your terminal",
   "bin": {
-    "shipflow": "dist/index.js"
+    "codepylot": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

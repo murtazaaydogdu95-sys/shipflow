@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Dialog,
@@ -237,6 +238,7 @@ export function QuickCapture({
       });
       if (!res.ok) throw new Error();
       const story = await res.json();
+      posthog.capture("story_created", { projectId, type, priority });
       toast.success(`Story ${story.shortId} created!`);
       onCreated(story);
       reset();
@@ -301,6 +303,7 @@ export function QuickCapture({
                   onChange={(e) => setRawInput(e.target.value)}
                   className="min-h-[80px] text-base"
                   autoFocus
+                  data-testid="quick-capture-input"
                 />
 
                 {/* Natural language command preview */}
@@ -332,8 +335,8 @@ export function QuickCapture({
                   {rewriteUsage && !rewriteUsage.unlimited && (
                     <span className={`text-xs ${rewriteUsage.remaining === 0 ? "text-destructive" : "text-muted-foreground"}`}>
                       {rewriteUsage.remaining === 0
-                        ? "No rewrites left today"
-                        : `${rewriteUsage.remaining}/${rewriteUsage.limit} rewrites left today`}
+                        ? "No rewrites left this month"
+                        : `${rewriteUsage.remaining}/${rewriteUsage.limit} rewrites left this month`}
                     </span>
                   )}
                   {rawInput.trim().length > 100 && (
@@ -363,6 +366,7 @@ export function QuickCapture({
                       disabled={!rawInput.trim() || rewriting}
                       variant="secondary"
                       size="sm"
+                      data-testid="rewrite-ai-btn"
                     >
                       {rewriting ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -477,7 +481,7 @@ export function QuickCapture({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreate} disabled={creating || (!rawInput.trim() && !title)}>
+            <Button onClick={handleCreate} disabled={creating || (!rawInput.trim() && !title)} data-testid="quick-capture-create-btn">
               {creating ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (

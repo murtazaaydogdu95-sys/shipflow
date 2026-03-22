@@ -98,7 +98,7 @@ export function ProjectsList({ projects, userId }: ProjectsListProps) {
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button data-testid="create-project-btn">
                 <Plus className="mr-2 h-4 w-4" />
                 New Project
               </Button>
@@ -184,7 +184,7 @@ export function ProjectsList({ projects, userId }: ProjectsListProps) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <Card key={project.id} className="hover:border-primary/50 transition-colors group">
+            <Card key={project.id} className="hover:border-primary/50 transition-colors group" data-testid={`project-card-${project.slug}`}>
               <Link href={`/projects/${project.id}`} className="cursor-pointer">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">

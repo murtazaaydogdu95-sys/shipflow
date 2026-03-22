@@ -17,7 +17,7 @@ model User {
   emailVerified    DateTime?
   image            String?
   plan             String        @default("FREE")
-  lemonSqueezyCustomerId String?  @unique
+  paddleCustomerId String?  @unique
   currentOrgId     String?
   deletedAt        DateTime?
   onboardingCompleted Boolean       @default(false)
@@ -102,7 +102,7 @@ model Organization {
   name             String
   slug             String        @unique
   plan             String        @default("FREE")
-  lemonSqueezyCustomerId String?  @unique
+  paddleCustomerId String?  @unique
   isPersonal       Boolean       @default(false)
   members          OrgMember[]
   projects         Project[]

@@ -7,7 +7,7 @@ dev.db-journal
 .env.*
 !.env.example
 .idea
-shipflow/
+codepylot/
 packages/mcp-server/node_modules
 packages/mcp-server/dist
 .DS_Store

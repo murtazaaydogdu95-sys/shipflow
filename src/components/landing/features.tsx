@@ -79,7 +79,7 @@ const features = [
     icon: Github,
     title: "GitHub Integration",
     description:
-      "Import repos, auto-link commits via [SF-XXX] tags, PR auto-comments, webhook-driven status updates, and push/merge from the UI.",
+      "Import repos, auto-link commits via [CP-XXX] tags, PR auto-comments, webhook-driven status updates, and push/merge from the UI.",
     color: "from-pink-500 to-rose-600",
     bgColor: "bg-pink-500/10",
     textColor: "text-pink-500",
@@ -239,7 +239,7 @@ const features = [
     icon: Smartphone,
     title: "Mobile PWA",
     description:
-      "Install ShipFlow as a native app on your phone. Manage stories, review agent work, and capture ideas on the go.",
+      "Install Codepylot as a native app on your phone. Manage stories, review agent work, and capture ideas on the go.",
     color: "from-cyan-500 to-teal-600",
     bgColor: "bg-cyan-500/10",
     textColor: "text-cyan-500",
@@ -273,7 +273,7 @@ export function Features() {
             Everything you need to ship faster
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-            From idea capture to deployed code — ShipFlow handles the entire
+            From idea capture to deployed code — Codepylot handles the entire
             workflow so you can focus on building.
           </p>
         </motion.div>

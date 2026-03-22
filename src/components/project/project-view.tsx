@@ -16,7 +16,7 @@ import type { BoardColumn as BoardColumnType, StoryWithRelations } from "@/types
 
 type ViewMode = "feed" | "board";
 
-const STORAGE_KEY = "shipflow-view-preference";
+const STORAGE_KEY = "codepylot-view-preference";
 
 function getInitialView(): ViewMode {
   if (typeof window === "undefined") return "feed";

@@ -7,7 +7,7 @@
  * 1. Finds all users who own projects (via ProjectMember where role=OWNER)
  * 2. Creates a personal workspace org for each user
  * 3. Assigns all their projects to the new org
- * 4. Copies user plan and lemonSqueezyCustomerId to the org
+ * 4. Copies user plan and paddleCustomerId to the org
  * 5. Migrates existing Subscription from userId to orgId
  * 6. Sets user.currentOrgId
  */
@@ -54,7 +54,7 @@ async function main() {
         name: `${name}'s Workspace`,
         slug,
         plan: user.plan || "FREE",
-        lemonSqueezyCustomerId: user.lemonSqueezyCustomerId,
+        paddleCustomerId: user.paddleCustomerId,
         members: {
           create: { userId: user.id, role: "OWNER" },
         },

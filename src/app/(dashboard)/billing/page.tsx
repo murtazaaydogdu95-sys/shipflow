@@ -1,12 +1,29 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState } from "react";
+import posthog from "posthog-js";
+import { useState, useEffect } from "react";
 import { PricingCard } from "@/components/billing/pricing-card";
 import { Button } from "@/components/ui/button";
 import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
 import useSWR from "swr";
 import { cn } from "@/lib/utils";
+
+declare global {
+  interface Window {
+    Paddle?: {
+      Initialize: (config: { token: string; environment?: string }) => void;
+      Checkout: {
+        open: (config: {
+          items: { priceId: string; quantity: number }[];
+          customer?: { email: string };
+          customData?: Record<string, string>;
+          settings?: { successUrl?: string };
+        }) => void;
+      };
+    };
+  }
+}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -44,6 +61,11 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
   );
 }
 
+const PADDLE_CLIENT_TOKEN = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || "";
+const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || "sandbox";
+const PADDLE_PRO_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRO_PRICE_ID || "";
+const PADDLE_PRO_MAX_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRO_MAX_PRICE_ID || "";
+
 export default function BillingPage() {
   const { data: session } = useSession();
   const orgId = session?.user?.orgId;
@@ -53,15 +75,55 @@ export default function BillingPage() {
   const isOwner = org?.role === "OWNER";
   const [loading, setLoading] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [paddleReady, setPaddleReady] = useState(false);
 
-  async function handleUpgrade() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/billing/checkout", { method: "POST" });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
+  useEffect(() => {
+    if (!PADDLE_CLIENT_TOKEN) return;
+
+    const init = () => {
+      if (window.Paddle) {
+        window.Paddle.Initialize({
+          token: PADDLE_CLIENT_TOKEN,
+          environment: PADDLE_ENVIRONMENT,
+        });
+        setPaddleReady(true);
       }
+    };
+
+    if (window.Paddle) {
+      init();
+    } else {
+      // Wait for Paddle.js to load
+      const interval = setInterval(() => {
+        if (window.Paddle) {
+          init();
+          clearInterval(interval);
+        }
+      }, 200);
+      return () => clearInterval(interval);
+    }
+  }, []);
+
+  function handleUpgrade(targetPlan: "PRO" | "PRO_MAX" = "PRO") {
+    if (!window.Paddle || !paddleReady) return;
+
+    const priceId = targetPlan === "PRO_MAX" ? PADDLE_PRO_MAX_PRICE_ID : PADDLE_PRO_PRICE_ID;
+    if (!priceId) return;
+
+    setLoading(true);
+    posthog.capture("upgrade_initiated", { targetPlan, currentPlan: plan });
+    try {
+      window.Paddle.Checkout.open({
+        items: [{ priceId, quantity: 1 }],
+        customer: { email: session?.user?.email || "" },
+        customData: {
+          orgId: orgId || "",
+          userId: session?.user?.id || "",
+        },
+        settings: {
+          successUrl: `${window.location.origin}/billing?success=true`,
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -102,7 +164,7 @@ export default function BillingPage() {
               limit={usage.stories.limit}
             />
             <UsageBar
-              label="AI Rewrites (today)"
+              label="AI Rewrites (this month)"
               used={usage.aiRewrites.used}
               limit={usage.aiRewrites.limit}
             />
@@ -114,16 +176,16 @@ export default function BillingPage() {
         </div>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-3 gap-6">
         <PricingCard
           name="Free"
           price="$0"
           description="For getting started"
           features={[
             "Up to 3 projects",
-            "50 stories per project",
+            "15 stories per project",
             "Kanban board",
-            "5 AI rewrites/day",
+            "4 AI rewrites/month",
           ]}
           current={plan === "FREE"}
         />
@@ -134,18 +196,32 @@ export default function BillingPage() {
           features={[
             "Unlimited projects",
             "Unlimited stories",
-            "50 AI rewrites/day",
-            "Agent auto-assign",
+            "50 AI rewrites/month",
+            "Up to 3 parallel agents",
             "GitHub integration",
             "Priority support",
           ]}
           current={plan === "PRO"}
-          onSelect={isOwner ? handleUpgrade : undefined}
+          onSelect={isOwner && plan === "FREE" ? () => handleUpgrade("PRO") : undefined}
+          loading={loading}
+        />
+        <PricingCard
+          name="Pro Max"
+          price="$39/mo"
+          description="For power users & teams"
+          features={[
+            "Everything in Pro",
+            "Unlimited AI rewrites",
+            "Up to 5 parallel agents",
+            "Priority agent queue",
+          ]}
+          current={plan === "PRO_MAX"}
+          onSelect={isOwner && plan !== "PRO_MAX" ? () => handleUpgrade("PRO_MAX") : undefined}
           loading={loading}
         />
       </div>
 
-      {plan === "PRO" && isOwner && (
+      {(plan === "PRO" || plan === "PRO_MAX") && isOwner && (
         <div>
           <Button onClick={handleManage} variant="outline" disabled={loading}>
             Manage Subscription

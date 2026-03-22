@@ -43,8 +43,8 @@ export async function attemptDelivery(deliveryId: string): Promise<void> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-ShipFlow-Event": delivery.event,
-        "X-ShipFlow-Signature": `sha256=${signature}`,
+        "X-Codepylot-Event": delivery.event,
+        "X-Codepylot-Signature": `sha256=${signature}`,
       },
       body: delivery.payload,
       signal: AbortSignal.timeout(10_000),

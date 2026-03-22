@@ -1,6 +1,6 @@
 {
-  "name": "@shipflow/browser-extension",
+  "name": "@codepylot/browser-extension",
   "version": "1.0.0",
-  "description": "ShipFlow browser extension for quick story capture",
+  "description": "Codepylot browser extension for quick story capture",
   "private": true
 }

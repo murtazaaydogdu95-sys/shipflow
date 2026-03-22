@@ -4,7 +4,7 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-const EMAIL_FROM = process.env.EMAIL_FROM || "ShipFlow <notifications@shipflow.dev>";
+const EMAIL_FROM = process.env.EMAIL_FROM || "Codepylot <notifications@codepylot.dev>";
 
 export async function sendEmail({
   to,
