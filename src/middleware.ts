@@ -31,7 +31,8 @@ function getClientIp(req: NextRequest): string {
   if (realIp) return realIp.trim();
 
   // Next.js req.ip is set by the platform (Vercel, etc.) — safe to trust
-  if (req.ip) return req.ip;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((req as any).ip) return (req as any).ip;
 
   // Do NOT trust x-forwarded-for — it can be spoofed by clients.
   // In local dev without a reverse proxy, all requests share one bucket.

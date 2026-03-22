@@ -18,6 +18,7 @@ export const test = base.extend<AuthFixtures>({
     await page.request.get(`${baseURL}/api/health`).catch(() => {});
 
     // page already has auth cookies loaded via storageState
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page);
 
     // Navigate to about:blank after each test to stop SWR polling

@@ -10,7 +10,7 @@ test.describe("Export", () => {
 
     // Track export URL via page.on("popup") for the new tab opened by window.open
     // Also intercept on the opened page if possible
-    let exportTriggered = false;
+    const exportTriggered = false;
 
     // Override window.open to capture the URL instead of opening a new tab
     await page.evaluate(() => {
