@@ -25,7 +25,6 @@ import { Download, Snowflake, CheckSquare, X } from "lucide-react";
 import type { StoryWithRelations, BoardColumn as BoardColumnType, StoryStatus } from "@/types";
 import { STORY_STATUSES, ALL_STORY_STATUSES, COLUMN_TITLES } from "@/types";
 import { BoardFilters, EMPTY_FILTERS, type BoardFilterState } from "./board-filters";
-import { KeyboardShortcutHelpDialog } from "./keyboard-shortcut-help-dialog";
 
 interface KanbanBoardProps {
   initialColumns: BoardColumnType[];
@@ -586,7 +585,6 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
         onUpdated={handleStoryUpdated}
       />
 
-      <KeyboardShortcutHelpDialog />
     </div>
   );
 }

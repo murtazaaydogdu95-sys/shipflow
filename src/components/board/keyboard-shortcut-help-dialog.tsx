@@ -77,14 +77,23 @@ export function KeyboardShortcutHelpDialog() {
       )
         return;
 
-      if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+      // "?" is Shift+/ on most keyboards. Some layouts/browsers report
+      // e.key as "/" with shiftKey=true instead of "?".
+      const isQuestionMark =
+        (e.key === "?" || (e.key === "/" && e.shiftKey)) &&
+        !e.metaKey &&
+        !e.ctrlKey;
+
+      if (isQuestionMark) {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
     }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // Use capture phase so this fires before Radix Dialog/Sheet focus traps
+    // can stopPropagation on the event.
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, []);
 
   return (
