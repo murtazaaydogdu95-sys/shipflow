@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { SortableStory } from "./sortable-story";
@@ -25,7 +26,7 @@ const columnColors: Record<string, string> = {
   DONE: "bg-green-500",
 };
 
-export function BoardColumn({ id, title, stories, onStoryClick, onStoryDelete }: BoardColumnProps) {
+export const BoardColumn = React.memo(function BoardColumn({ id, title, stories, onStoryClick, onStoryDelete }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const totalPoints = stories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
 
@@ -66,4 +67,4 @@ export function BoardColumn({ id, title, stories, onStoryClick, onStoryDelete }:
       </ScrollArea>
     </div>
   );
-}
+});

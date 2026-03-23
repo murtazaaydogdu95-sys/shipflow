@@ -53,6 +53,7 @@ export function StoryDetailModal({
   const [commentText, setCommentText] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
   const [deploying, setDeploying] = useState(false);
+  const [activeTab, setActiveTab] = useState("details");
 
   const { memberCount } = useSoloMode();
   const isOpen = !!story;
@@ -62,29 +63,30 @@ export function StoryDetailModal({
     fetcher
   );
 
+  // Lazy-load tab data: only fetch when the user clicks the corresponding tab
   const { data: comments, mutate: mutateComments } = useSWR(
-    isOpen && story ? `/api/projects/${projectId}/stories/${story.id}/comments` : null,
+    isOpen && story && activeTab === "comments" ? `/api/projects/${projectId}/stories/${story.id}/comments` : null,
     fetcher
   );
 
   const { data: depsData, mutate: mutateDeps } = useSWR(
-    isOpen && story ? `/api/projects/${projectId}/stories/${story.id}/dependencies` : null,
+    isOpen && story && activeTab === "deps" ? `/api/projects/${projectId}/stories/${story.id}/dependencies` : null,
     fetcher
   );
 
   const { data: attachments, mutate: mutateAttachments } = useSWR(
-    isOpen && story ? `/api/projects/${projectId}/stories/${story.id}/attachments` : null,
+    isOpen && story && activeTab === "files" ? `/api/projects/${projectId}/stories/${story.id}/attachments` : null,
     fetcher
   );
 
   const { data: agentLogs } = useSWR(
-    isOpen && story?.assignedToAgent ? `/api/projects/${projectId}/stories/${story.id}/logs` : null,
+    isOpen && story?.assignedToAgent && activeTab === "logs" ? `/api/projects/${projectId}/stories/${story.id}/logs` : null,
     fetcher,
-    { refreshInterval: story?.agentStatus === "RUNNING" ? 5000 : 0 }
+    { refreshInterval: story?.agentStatus === "RUNNING" && activeTab === "logs" ? 5000 : 0 }
   );
 
   const { data: diffData } = useSWR(
-    isOpen && story?.branchName ? `/api/projects/${projectId}/stories/${story.id}/diff` : null,
+    isOpen && story?.branchName && activeTab === "diff" ? `/api/projects/${projectId}/stories/${story.id}/diff` : null,
     fetcher
   );
 
@@ -96,6 +98,7 @@ export function StoryDetailModal({
     setEditType((story as StoryWithRelations & { type?: string }).type || "feature");
     setEditPoints(story.storyPoints ? String(story.storyPoints) : "");
     setEditAssigneeId(story.assigneeId || "");
+    setActiveTab("details");
   }
 
   async function handleSave() {
@@ -432,7 +435,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
               />
             )}
 
-            <Tabs defaultValue="details" className="mt-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
               <TabsList className="w-full flex-wrap h-auto gap-0.5 p-1">
                 <TabsTrigger value="details" className="flex-1 text-xs">
                   Details

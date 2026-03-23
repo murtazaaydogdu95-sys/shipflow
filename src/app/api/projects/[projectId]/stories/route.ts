@@ -87,7 +87,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
     take: maxUnpaginated,
   });
 
-  return NextResponse.json(stories);
+  return NextResponse.json(stories, {
+    headers: {
+      "Cache-Control": "private, max-age=5, stale-while-revalidate=10",
+    },
+  });
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
