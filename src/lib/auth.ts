@@ -25,7 +25,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     GitHub({
-      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: { scope: "read:user user:email repo" },
       },
@@ -38,7 +37,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       },
     }),
-    Google({ allowDangerousEmailAccountLinking: true }),
+    Google({}),
     Credentials({
       name: "Credentials",
       credentials: {

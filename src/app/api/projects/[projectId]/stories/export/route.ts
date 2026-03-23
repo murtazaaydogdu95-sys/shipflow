@@ -25,13 +25,17 @@ export async function GET(
 
   if (format === "csv") {
     // Escape CSV values: quote strings, double-escape internal quotes,
-    // and neutralize formula injection (=, +, -, @, tab, CR)
+    // and neutralize formula injection (=, +, -, @, tab, CR).
+    // Tab-prefix is the most reliable defense across Excel, Google Sheets, and LibreOffice.
     const csvEscape = (val: string | number | null | undefined): string => {
       if (val == null || val === "") return "";
       const str = String(val);
       const escaped = str.replace(/"/g, '""');
-      if (/^[=+\-@\t\r]/.test(escaped) || /[",\n]/.test(escaped)) {
-        return `"'${escaped}"`;
+      if (/^[=+\-@\t\r]/.test(escaped)) {
+        return `"\t${escaped}"`;
+      }
+      if (/[",\n]/.test(escaped)) {
+        return `"${escaped}"`;
       }
       return `"${escaped}"`;
     };

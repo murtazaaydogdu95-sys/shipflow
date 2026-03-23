@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseJsonBody } from "@/lib/api-error";
 
 const DEFAULT_PREFS = { email: true, inApp: true, digest: "instant" as const };
 
@@ -26,12 +27,9 @@ export async function PATCH(req: Request) {
   if (!session?.user?.id)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(req, 1024);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data as { email?: boolean; inApp?: boolean; digest?: string };
 
   const { email, inApp, digest } = body;
 

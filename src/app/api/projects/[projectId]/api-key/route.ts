@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { hashApiKey } from "@/lib/api-auth";
+import { parseJsonBody } from "@/lib/api-error";
 
 export async function POST(
   req: Request,
@@ -15,11 +16,11 @@ export async function POST(
   if (!access) return access === null ? unauthorizedResponse() : forbiddenResponse();
 
   let body: { rotate?: boolean } = {};
-  try {
-    body = await req.json();
-  } catch {
-    // No body is fine — treat as generate
+  const parsed = await parseJsonBody(req, 1024);
+  if (parsed.ok) {
+    body = parsed.data as { rotate?: boolean };
   }
+  // No body is fine — treat as generate
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },

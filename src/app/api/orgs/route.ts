@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { nanoid } from "nanoid";
+import { parseJsonBody } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();
@@ -38,12 +39,9 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(req, 4096);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data as { name?: string };
 
   const { name } = body;
   if (!name || typeof name !== "string" || name.trim().length < 2) {

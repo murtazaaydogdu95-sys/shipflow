@@ -24,13 +24,9 @@ export async function authenticateApiKey(req: Request) {
   if (!authHeader?.startsWith("Bearer ")) return null;
   const apiKey = authHeader.slice(7);
 
-  // Try hashed lookup first
+  // Hashed key lookup only — plaintext fallback removed (migration complete)
   const hash = hashApiKey(apiKey);
-  let project = await prisma.project.findFirst({ where: { apiKeyHash: hash } });
-  if (project) return project;
-
-  // Fallback: plaintext lookup (backward compat during transition)
-  project = await prisma.project.findUnique({ where: { apiKey } });
+  const project = await prisma.project.findFirst({ where: { apiKeyHash: hash } });
   return project;
 }
 

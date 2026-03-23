@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseJsonBody } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();
@@ -23,12 +24,9 @@ export async function PATCH(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(req, 1024);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data as { all?: boolean; ids?: string[] };
 
   if (body.all) {
     await prisma.notification.updateMany({

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TOTP, Secret } from "otpauth";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { parseJsonBody } from "@/lib/api-error";
 
 export async function POST(req: Request) {
@@ -38,14 +38,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   }
 
-  // Try backup code
+  // Try backup code — constant-time comparison to prevent timing attacks
   if (user.totpBackupCodes) {
     const hashedCodes: string[] = JSON.parse(user.totpBackupCodes);
     const hashedInput = createHash("sha256").update(code).digest("hex");
-    const idx = hashedCodes.indexOf(hashedInput);
-    if (idx !== -1) {
+    const inputBuffer = Buffer.from(hashedInput, "utf-8");
+
+    let matchIndex = -1;
+    for (let i = 0; i < hashedCodes.length; i++) {
+      const codeBuffer = Buffer.from(hashedCodes[i], "utf-8");
+      if (
+        inputBuffer.length === codeBuffer.length &&
+        timingSafeEqual(inputBuffer, codeBuffer)
+      ) {
+        matchIndex = i;
+      }
+      // Continue iterating ALL codes to avoid leaking which index matched
+    }
+
+    if (matchIndex !== -1) {
       // Remove used backup code
-      hashedCodes.splice(idx, 1);
+      hashedCodes.splice(matchIndex, 1);
       await prisma.user.update({
         where: { id: session.user.id },
         data: { totpBackupCodes: JSON.stringify(hashedCodes) },

@@ -21,8 +21,8 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   // Archives
   "application/zip", "application/gzip",
-  // Code/data
-  "application/json", "text/html", "text/css", "text/javascript",
+  // Code/data (text/html and text/javascript excluded — can enable stored XSS)
+  "application/json", "text/css",
 ]);
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -30,7 +30,7 @@ const ALLOWED_EXTENSIONS = new Set([
   ".pdf", ".txt", ".csv", ".md",
   ".doc", ".docx", ".xls", ".xlsx",
   ".zip", ".gz",
-  ".json", ".html", ".css", ".js", ".ts", ".tsx", ".jsx",
+  ".json", ".css", ".ts", ".tsx", ".jsx",
 ]);
 
 export async function GET(
