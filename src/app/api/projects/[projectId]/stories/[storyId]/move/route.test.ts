@@ -31,6 +31,8 @@ function mockSessionAuth() {
 describe("PATCH /api/projects/[projectId]/stories/[storyId]/move", () => {
   beforeEach(() => {
     resetAllMocks();
+    vi.mocked(dispatchWebhook).mockClear();
+    vi.mocked(processNextStory).mockClear();
     mockSessionAuth();
     mockPrisma.project.findUnique.mockResolvedValue(makeProjectData());
   });
@@ -125,5 +127,56 @@ describe("PATCH /api/projects/[projectId]/stories/[storyId]/move", () => {
     const res = await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
 
     expect(res.status).toBe(404);
+  });
+
+  it("allows same-status move (reposition within column)", async () => {
+    const story = makeStoryData({ status: "TODO", position: 0 });
+    mockPrisma.story.findFirst.mockResolvedValue(story);
+    mockPrisma.story.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.story.update.mockResolvedValue({ ...story, status: "TODO", position: 2 });
+
+    const req = makeRequest("PATCH", BASE_URL, { status: "TODO", position: 2 });
+    const res = await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+    expect(res.status).toBe(200);
+    // No webhook dispatched for same-status moves
+    expect(dispatchWebhook).not.toHaveBeenCalled();
+    // No processNextStory triggered for same-status
+    expect(processNextStory).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 with validTransitions for ICEBOX to IN_PROGRESS", async () => {
+    const story = makeStoryData({ status: "ICEBOX", position: 0 });
+    mockPrisma.story.findFirst.mockResolvedValue(story);
+
+    const req = makeRequest("PATCH", BASE_URL, { status: "IN_PROGRESS", position: 0 });
+    const res = await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+    expect(res.status).toBe(422);
+    const body = await parseResponse(res);
+    expect(body.validTransitions).toEqual(expect.arrayContaining(["BACKLOG", "TODO"]));
+    expect(body.validTransitions).not.toContain("IN_PROGRESS");
+  });
+
+  it("creates activity log when status changes", async () => {
+    const story = makeStoryData({ status: "IN_PROGRESS", position: 0 });
+    mockPrisma.story.findFirst.mockResolvedValue(story);
+    mockPrisma.story.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.story.update.mockResolvedValue({ ...story, status: "REVIEW", position: 0 });
+    mockPrisma.activity.create.mockResolvedValue({});
+
+    const req = makeRequest("PATCH", BASE_URL, { status: "REVIEW", position: 0 });
+    await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+    expect(mockPrisma.activity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "STORY_MOVED",
+          message: "Moved from IN_PROGRESS to REVIEW",
+          projectId: PROJECT_ID,
+          storyId: STORY_ID,
+        }),
+      })
+    );
   });
 });

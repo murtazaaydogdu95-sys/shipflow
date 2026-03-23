@@ -30,6 +30,9 @@ export function createMockPrisma() {
     subscription: modelMock(),
     label: modelMock(),
     storyLabel: modelMock(),
+    webhook: modelMock(),
+    webhookDelivery: modelMock(),
+    auditLog: modelMock(),
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
