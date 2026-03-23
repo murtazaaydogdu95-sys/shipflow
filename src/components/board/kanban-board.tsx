@@ -65,6 +65,10 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
   // Prevent DndContext hydration mismatch — only mount after client hydration
   useEffect(() => setMounted(true), []);
 
+  // Track last fetch timestamp for delta sync and data fingerprint
+  const lastFetchedAt = useRef<string | null>(null);
+  const lastDataFingerprint = useRef<string>("");
+
   // Poll for board updates (agent status changes, review notifications)
   useEffect(() => {
     // Track initial review stories
@@ -73,9 +77,30 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/projects/${projectId}/stories`);
+        const headers: Record<string, string> = {};
+        if (lastFetchedAt.current) {
+          headers["If-Modified-Since"] = lastFetchedAt.current;
+        }
+
+        const res = await fetch(`/api/projects/${projectId}/stories`, { headers });
+
+        // 304 Not Modified — no changes since last fetch
+        if (res.status === 304) return;
         if (!res.ok) return;
+
         const stories: StoryWithRelations[] = await res.json();
+
+        // Track last successful fetch time
+        lastFetchedAt.current = new Date().toUTCString();
+
+        // Only update state if data actually changed (compare count + latest updatedAt)
+        const latestUpdatedAt = stories.reduce((max, s) => {
+          const t = s.updatedAt ? String(s.updatedAt) : "";
+          return t > max ? t : max;
+        }, "");
+        const fingerprint = `${stories.length}:${latestUpdatedAt}`;
+        if (fingerprint === lastDataFingerprint.current) return;
+        lastDataFingerprint.current = fingerprint;
 
         // Group by status
         const grouped: Record<string, StoryWithRelations[]> = {};
@@ -115,7 +140,7 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
       } catch {
         // ignore polling errors
       }
-    }, 5000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [projectId, initialColumns]);
 
@@ -130,14 +155,14 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
     [columns]
   );
 
-  const handleDragStart = (event: DragStartEvent) => {
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
     const column = findColumnByStoryId(active.id as string);
     const story = column?.stories.find((s) => s.id === active.id);
     if (story) setActiveStory(story);
-  };
+  }, [findColumnByStoryId]);
 
-  const handleDragOver = (event: DragOverEvent) => {
+  const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) return;
 
@@ -176,9 +201,25 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
 
       return newColumns;
     });
-  };
+  }, [findColumnByStoryId, columns]);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const moveStory = useCallback(async (storyId: string, status: string, position: number) => {
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/stories/${storyId}/move`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status, position }),
+        }
+      );
+      if (!res.ok) throw new Error();
+    } catch {
+      toast.error("Failed to move story");
+    }
+  }, [projectId]);
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveStory(null);
 
@@ -214,23 +255,7 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
 
       await moveStory(active.id as string, activeCol.id, overIdx >= 0 ? overIdx : storyIdx);
     }
-  };
-
-  const moveStory = async (storyId: string, status: string, position: number) => {
-    try {
-      const res = await fetch(
-        `/api/projects/${projectId}/stories/${storyId}/move`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status, position }),
-        }
-      );
-      if (!res.ok) throw new Error();
-    } catch {
-      toast.error("Failed to move story");
-    }
-  };
+  }, [findColumnByStoryId, columns, moveStory]);
 
   const handleStoryDeleted = async (storyId: string) => {
     try {

@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { StoryWithRelations } from "@/types";
@@ -31,7 +32,7 @@ interface StoryCardProps {
   isFocused?: boolean;
 }
 
-export function StoryCard({ story, onClick, onDelete, isDragging, isSelected, isFocused }: StoryCardProps) {
+export const StoryCard = React.memo(function StoryCard({ story, onClick, onDelete, isDragging, isSelected, isFocused }: StoryCardProps) {
   const completedAC = story.acceptanceCriteria.filter((ac) => ac.completed).length;
   const totalAC = story.acceptanceCriteria.length;
   const storyType = (story as StoryWithRelations & { type?: string }).type;
@@ -177,4 +178,19 @@ export function StoryCard({ story, onClick, onDelete, isDragging, isSelected, is
       </div>
     </Card>
   );
-}
+}, (prev, next) => {
+  return (
+    prev.story.id === next.story.id &&
+    prev.story.title === next.story.title &&
+    prev.story.status === next.story.status &&
+    prev.story.priority === next.story.priority &&
+    prev.story.storyPoints === next.story.storyPoints &&
+    prev.story.shortId === next.story.shortId &&
+    prev.story.assignee?.id === next.story.assignee?.id &&
+    (prev.story.labels?.length ?? 0) === (next.story.labels?.length ?? 0) &&
+    prev.isDragging === next.isDragging &&
+    prev.isSelected === next.isSelected &&
+    prev.isFocused === next.isFocused &&
+    prev.story.agentStatus === next.story.agentStatus
+  );
+});

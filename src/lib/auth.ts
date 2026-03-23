@@ -125,16 +125,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const pendingInvites = await prisma.orgInvite.findMany({
           where: { email: user.email },
         });
-        for (const invite of pendingInvites) {
-          const alreadyMember = await prisma.orgMember.findUnique({
-            where: { userId_orgId: { userId: user.id, orgId: invite.orgId } },
+        if (pendingInvites.length > 0) {
+          const inviteOrgIds = pendingInvites.map((inv) => inv.orgId);
+          // Batch fetch existing memberships
+          const existingMemberships = await prisma.orgMember.findMany({
+            where: { userId: user.id, orgId: { in: inviteOrgIds } },
+            select: { orgId: true },
           });
-          if (!alreadyMember) {
-            await prisma.orgMember.create({
-              data: { userId: user.id, orgId: invite.orgId, role: invite.role },
-            });
+          const existingOrgIds = new Set(existingMemberships.map((m) => m.orgId));
+          // Batch create new memberships
+          const newMemberships = pendingInvites
+            .filter((inv) => !existingOrgIds.has(inv.orgId))
+            .map((inv) => ({ userId: user.id!, orgId: inv.orgId, role: inv.role }));
+          if (newMemberships.length > 0) {
+            await prisma.orgMember.createMany({ data: newMemberships });
           }
-          await prisma.orgInvite.delete({ where: { id: invite.id } });
+          // Batch delete all processed invites
+          await prisma.orgInvite.deleteMany({
+            where: { id: { in: pendingInvites.map((inv) => inv.id) } },
+          });
         }
       }
     },
