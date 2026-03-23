@@ -9,16 +9,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Bot, Check, Save, Loader2, Trash2, ThumbsUp, ThumbsDown, Send, GitBranch, Globe, MessageSquare, Ban, Undo2, Paperclip, FileText, ScrollText, GitCompare, Rocket } from "lucide-react";
+import { Copy, Bot, Save, Loader2, Ban, Paperclip, ScrollText, GitCompare, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import type { StoryWithRelations } from "@/types";
 import { STORY_TYPES } from "@/types";
-import { cn } from "@/lib/utils";
 import { useSoloMode } from "@/hooks/use-solo-mode";
 import { DiffViewer } from "@/components/stories/diff-viewer";
 import { AIReview } from "@/components/stories/ai-review";
+import { StoryComments } from "@/components/stories/story-comments";
+import { StoryDependencies } from "@/components/stories/story-dependencies";
+import { StoryAttachments } from "@/components/stories/story-attachments";
+import { StoryAgentLogs } from "@/components/stories/story-agent-logs";
+import { StoryReviewPanel } from "@/components/stories/story-review-panel";
 
 type MemberOption = { id: string; name: string | null; image: string | null };
 
@@ -46,8 +49,6 @@ export function StoryDetailModal({
   const [editPoints, setEditPoints] = useState<string>("");
   const [editType, setEditType] = useState("");
   const [editAssigneeId, setEditAssigneeId] = useState<string>("");
-  const [rejecting, setRejecting] = useState(false);
-  const [rejectFeedback, setRejectFeedback] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
@@ -200,8 +201,8 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
     }
   }
 
-  async function handleReject() {
-    if (!story || !rejectFeedback.trim()) {
+  async function handleReject(feedback: string) {
+    if (!story || !feedback.trim()) {
       toast.error("Please provide feedback on what needs to be fixed");
       return;
     }
@@ -221,7 +222,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
         body: JSON.stringify({
           status: "TODO",
           agentStatus: null,
-          agentNotes: `Review feedback: ${rejectFeedback}`,
+          agentNotes: `Review feedback: ${feedback}`,
           previewPort: null,
           previewPid: null,
         }),
@@ -230,7 +231,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
       await fetch(`/api/projects/${projectId}/stories/${story.id}/trigger-agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feedback: rejectFeedback }),
+        body: JSON.stringify({ feedback }),
       });
       const refreshRes = await fetch(`/api/projects/${projectId}/stories/${story.id}`);
       if (refreshRes.ok) {
@@ -238,8 +239,6 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
         onUpdated(updated);
       }
       toast.success("Feedback sent — agent will rework the story on same branch");
-      setRejecting(false);
-      setRejectFeedback("");
     } catch {
       toast.error("Failed to send feedback");
     } finally {
@@ -329,8 +328,6 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
     setEditType("");
     setEditPoints("");
     setEditAssigneeId("");
-    setRejecting(false);
-    setRejectFeedback("");
     setCommentText("");
     onClose();
   }
@@ -367,6 +364,23 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
     }
   }
 
+  async function handleDeploy() {
+    if (!story) return;
+    setDeploying(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/stories/${story.id}/deploy`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Deploy failed");
+      } else {
+        const data = await res.json();
+        if (data.url) toast.success(`Deployed: ${data.url}`);
+        else toast.error("Deploy failed");
+      }
+    } catch { toast.error("Deploy failed"); }
+    finally { setDeploying(false); }
+  }
+
   return (
     <Sheet open={isOpen} onOpenChange={(o) => !o && handleClose()}>
       <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
@@ -399,141 +413,23 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
             </SheetHeader>
 
             {story.status === "REVIEW" && story.assignedToAgent && (
-              <div className="mt-4 rounded-lg border border-purple-500/30 bg-purple-500/5 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Bot className="h-4 w-4 text-purple-500" />
-                  <span className="text-sm font-medium">Agent completed — awaiting your review</span>
-                </div>
-                {story.agentNotes && (
-                  <div className="text-sm text-muted-foreground bg-muted rounded p-3">
-                    <span className="font-medium text-foreground">Agent notes: </span>
-                    {story.agentNotes}
-                  </div>
-                )}
-                {story.branchName && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <GitBranch className="h-3.5 w-3.5" />
-                    <span className="font-mono">{story.branchName}</span>
-                  </div>
-                )}
-                {(story.previewPort || story.branchName) && (
-                  <div className="flex items-center gap-1.5">
-                    <Globe className={`h-3.5 w-3.5 ${story.previewPort ? "text-green-500 animate-pulse" : "text-muted-foreground"}`} />
-                    <a
-                      href={`/api/preview/${story.shortId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`text-xs hover:underline font-mono ${story.previewPort ? "text-green-500" : "text-muted-foreground"}`}
-                    >
-                      Preview: /preview/{story.shortId}
-                    </a>
-                  </div>
-                )}
-                {story.commitHash && (
-                  <p className="text-xs text-muted-foreground font-mono">
-                    Commit: {story.commitHash}
-                  </p>
-                )}
-                {story.deployStatus && story.deployStatus !== "idle" && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <Rocket className={`h-3.5 w-3.5 ${story.deployStatus === "deployed" ? "text-green-500" : story.deployStatus === "deploying" ? "text-yellow-500 animate-pulse" : "text-red-500"}`} />
-                    <span className="capitalize">{story.deployStatus}</span>
-                    {story.deployUrl && (
-                      <a href={story.deployUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline font-mono truncate">
-                        {story.deployUrl}
-                      </a>
-                    )}
-                  </div>
-                )}
-                {!rejecting ? (
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={handleApprove}
-                      disabled={reviewLoading}
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      {reviewLoading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <ThumbsUp className="mr-2 h-4 w-4" />
-                      )}
-                      Approve
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        setDeploying(true);
-                        try {
-                          const res = await fetch(`/api/projects/${projectId}/stories/${story.id}/deploy`, { method: "POST" });
-                          if (!res.ok) {
-                            const data = await res.json();
-                            toast.error(data.error || "Deploy failed");
-                          } else {
-                            const data = await res.json();
-                            if (data.url) toast.success(`Deployed: ${data.url}`);
-                            else toast.error("Deploy failed");
-                          }
-                        } catch { toast.error("Deploy failed"); }
-                        finally { setDeploying(false); }
-                      }}
-                      disabled={deploying || reviewLoading}
-                      title="Deploy branch"
-                    >
-                      {deploying ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Rocket className="mr-1 h-4 w-4" />}
-                      Deploy
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setRejecting(true)}
-                      disabled={reviewLoading}
-                      className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
-                    >
-                      <ThumbsDown className="mr-2 h-4 w-4" />
-                      Request Changes
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleRevert}
-                      disabled={reviewLoading}
-                      title="Revert agent work"
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      <Undo2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Textarea
-                      value={rejectFeedback}
-                      onChange={(e) => setRejectFeedback(e.target.value)}
-                      placeholder="Describe what needs to be fixed..."
-                      className="min-h-[80px]"
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={handleReject}
-                        disabled={reviewLoading || !rejectFeedback.trim()}
-                        className="flex-1"
-                        variant="destructive"
-                      >
-                        {reviewLoading ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="mr-2 h-4 w-4" />
-                        )}
-                        Send Feedback & Re-trigger Agent
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => { setRejecting(false); setRejectFeedback(""); }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <StoryReviewPanel
+                story={{
+                  shortId: story.shortId,
+                  agentNotes: story.agentNotes,
+                  branchName: story.branchName,
+                  previewPort: story.previewPort,
+                  commitHash: story.commitHash,
+                  deployStatus: story.deployStatus,
+                  deployUrl: story.deployUrl,
+                }}
+                reviewLoading={reviewLoading}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onRevert={handleRevert}
+                onDeploy={handleDeploy}
+                deploying={deploying}
+              />
             )}
 
             <Tabs defaultValue="details" className="mt-4">
@@ -726,173 +622,42 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
               </TabsContent>
 
               <TabsContent value="comments" className="space-y-4 mt-4">
-                <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {(!comments || comments.length === 0) ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">
-                      No comments yet. Start the conversation.
-                    </p>
-                  ) : (
-                    comments.map((comment: { id: string; content: string; createdAt: string; userId: string; user: { id: string; name: string | null; image: string | null } }) => (
-                      <div key={comment.id} className="flex gap-3 group">
-                        <Avatar className="h-7 w-7 shrink-0">
-                          <AvatarImage src={comment.user.image ?? undefined} />
-                          <AvatarFallback className="text-[10px]">
-                            {(comment.user.name?.[0] || "?").toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{comment.user.name || "Unknown"}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(comment.createdAt).toLocaleDateString()}
-                            </span>
-                            <button
-                              onClick={() => handleDeleteComment(comment.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                              title="Delete comment"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-wrap">{comment.content}</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-                <Separator />
-                <div className="flex gap-2">
-                  <Textarea
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Add a comment..."
-                    className="min-h-[60px]"
-                    data-testid="story-detail-comment-input"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        handleAddComment();
-                      }
-                    }}
-                  />
-                  <Button
-                    size="icon"
-                    onClick={handleAddComment}
-                    disabled={commentLoading || !commentText.trim()}
-                    className="shrink-0 self-end"
-                    data-testid="story-detail-comment-submit"
-                  >
-                    {commentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </Button>
-                </div>
+                <StoryComments
+                  comments={comments}
+                  newComment={commentText}
+                  setNewComment={setCommentText}
+                  addComment={handleAddComment}
+                  deleteComment={handleDeleteComment}
+                  commentLoading={commentLoading}
+                />
               </TabsContent>
 
               <TabsContent value="deps" className="space-y-4 mt-4">
-                <div>
-                  <label className="text-sm font-medium">Blocked By</label>
-                  {depsData?.blockedBy?.length > 0 ? (
-                    <div className="mt-2 space-y-1">
-                      {depsData.blockedBy.map((dep: { id: string; blocker: { id: string; shortId: string; title: string; status: string } }) => (
-                        <div key={dep.id} className="flex items-center gap-2 text-sm rounded border p-2">
-                          <Ban className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                          <span className="font-mono text-xs text-muted-foreground">{dep.blocker.shortId}</span>
-                          <span className="flex-1 truncate">{dep.blocker.title}</span>
-                          <Badge variant={dep.blocker.status === "DONE" ? "default" : "secondary"} className="text-[10px]">
-                            {dep.blocker.status}
-                          </Badge>
-                          <button onClick={() => handleRemoveDependency(dep.id)} className="text-muted-foreground hover:text-destructive">
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mt-1">No blockers</p>
-                  )}
-                </div>
-                {depsData?.blocking?.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium">Blocking</label>
-                    <div className="mt-2 space-y-1">
-                      {depsData.blocking.map((dep: { id: string; blocked: { id: string; shortId: string; title: string; status: string } }) => (
-                        <div key={dep.id} className="flex items-center gap-2 text-sm rounded border p-2">
-                          <span className="font-mono text-xs text-muted-foreground">{dep.blocked.shortId}</span>
-                          <span className="flex-1 truncate">{dep.blocked.title}</span>
-                          <Badge variant="secondary" className="text-[10px]">{dep.blocked.status}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <label className="text-sm font-medium">Add Blocker</label>
-                  <DependencySearch projectId={projectId} storyId={story.id} onAdd={handleAddDependency} />
-                </div>
+                <StoryDependencies
+                  depsData={depsData}
+                  projectId={projectId}
+                  storyId={story.id}
+                  onAddDependency={handleAddDependency}
+                  onRemoveDependency={handleRemoveDependency}
+                />
               </TabsContent>
 
               <TabsContent value="files" className="space-y-4 mt-4">
-                <div>
-                  <label
-                    className="flex items-center gap-2 text-sm font-medium cursor-pointer border-2 border-dashed rounded-lg p-4 hover:border-primary/50 transition-colors text-center justify-center"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files[0];
-                      if (file) handleUploadAttachment(file);
-                    }}
-                  >
-                    <Paperclip className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Drop file or click to upload (max 10MB)</span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleUploadAttachment(file);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                {attachments?.length > 0 ? (
-                  <div className="space-y-2">
-                    {attachments.map((att: { id: string; filename: string; url: string; size: number; mimeType: string }) => (
-                      <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm rounded border p-2 hover:bg-muted/50 transition-colors">
-                        {att.mimeType.startsWith("image/") ? (
-                          <img src={att.url} alt={att.filename} className="h-8 w-8 object-cover rounded" />
-                        ) : (
-                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                        )}
-                        <span className="flex-1 truncate">{att.filename}</span>
-                        <span className="text-xs text-muted-foreground">{(att.size / 1024).toFixed(0)} KB</span>
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">No attachments yet.</p>
-                )}
+                <StoryAttachments
+                  attachments={attachments}
+                  onUpload={handleUploadAttachment}
+                />
               </TabsContent>
 
               {story.assignedToAgent && (
                 <TabsContent value="logs" className="space-y-4 mt-4">
-                  <div className="flex items-center gap-2">
-                    <ScrollText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Agent Logs</span>
-                    {story.agentStatus === "RUNNING" && (
-                      <Badge variant="secondary" className="text-[10px] animate-pulse">Live</Badge>
-                    )}
-                    {agentLogs?.totalLines > 0 && (
-                      <span className="text-xs text-muted-foreground ml-auto">{agentLogs.totalLines} lines</span>
-                    )}
-                  </div>
-                  <pre className="text-xs bg-muted rounded-lg p-4 overflow-auto max-h-[400px] whitespace-pre-wrap font-mono">
-                    {agentLogs?.log || "No logs available. Agent may not have started yet."}
-                  </pre>
-                  {story.branchName && !story.agentStatus?.match(/RUNNING|QUEUED/) && (
-                    <Button variant="outline" size="sm" onClick={handleRevert} disabled={reviewLoading}>
-                      <Undo2 className="mr-2 h-3.5 w-3.5" />
-                      Revert Agent Work
-                    </Button>
-                  )}
+                  <StoryAgentLogs
+                    logs={agentLogs}
+                    agentStatus={story.agentStatus}
+                    branchName={story.branchName}
+                    onRevert={handleRevert}
+                    reviewLoading={reviewLoading}
+                  />
                 </TabsContent>
               )}
 
@@ -937,40 +702,5 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
         )}
       </SheetContent>
     </Sheet>
-  );
-}
-
-function DependencySearch({ projectId, storyId, onAdd }: { projectId: string; storyId: string; onAdd: (blockerId: string) => void }) {
-  const [search, setSearch] = useState("");
-  const { data: results } = useSWR<Array<{ id: string; shortId: string; title: string; status: string }>>(
-    search.length >= 2 ? `/api/projects/${projectId}/stories?search=${encodeURIComponent(search)}` : null,
-    fetcher
-  );
-
-  const filtered = results?.filter((s) => s.id !== storyId) ?? [];
-
-  return (
-    <div className="mt-1">
-      <Input
-        placeholder="Search by ID or title..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="h-8 text-sm"
-      />
-      {filtered.length > 0 && (
-        <div className="mt-1 border rounded max-h-32 overflow-y-auto">
-          {filtered.slice(0, 5).map((s) => (
-            <button
-              key={s.id}
-              onClick={() => { onAdd(s.id); setSearch(""); }}
-              className="w-full text-left px-2 py-1.5 text-sm hover:bg-muted flex items-center gap-2"
-            >
-              <span className="font-mono text-xs text-muted-foreground">{s.shortId}</span>
-              <span className="truncate flex-1">{s.title}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }

@@ -227,9 +227,11 @@ model Story {
   updatedAt          DateTime             @updatedAt
 
   @@index([projectId, status])
+  @@index([projectId, status, agentStatus])
   @@index([sprintId])
   @@index([parentId])
   @@index([assigneeId])
+  @@index([assigneeId, status])
 }
 
 model AcceptanceCriterion {
