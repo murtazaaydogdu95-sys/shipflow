@@ -153,43 +153,58 @@ async function claimAgentSlot(storyId: string, projectId: string): Promise<boole
  * All priorities are eligible. Order: CRITICAL → HIGH → MEDIUM → LOW, then by creation date.
  */
 async function findNextStory(projectId: string) {
-  const stories = await prisma.story.findMany({
-    where: {
-      projectId,
-      status: { in: ["BACKLOG", "TODO"] },
-      agentStatus: null, // not already queued/running/completed
-    },
-    include: {
-      acceptanceCriteria: { orderBy: { position: "asc" } },
-      blockedByDeps: {
-        include: { blocker: { select: { status: true } } },
+  // Use Prisma raw ordering by priority via a CASE expression is not supported,
+  // so we use orderBy with multiple fields and filter blocked stories in memory.
+  // Optimization: fetch candidates ordered by priority then createdAt, with blockedByDeps included.
+  // We fetch a small batch and find the first unblocked one.
+  const batchSize = 20;
+  let skip = 0;
+
+  while (true) {
+    const stories = await prisma.story.findMany({
+      where: {
+        projectId,
+        status: { in: ["BACKLOG", "TODO"] },
+        agentStatus: null, // not already queued/running/completed
       },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+      include: {
+        acceptanceCriteria: { orderBy: { position: "asc" } },
+        blockedByDeps: {
+          include: { blocker: { select: { status: true } } },
+        },
+      },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      take: batchSize,
+      skip,
+    });
 
-  if (stories.length === 0) return null;
+    if (stories.length === 0) {
+      if (skip > 0) {
+        console.log(`[agent-trigger] findNextStory: all eligible stories are blocked`);
+      }
+      return null;
+    }
 
-  // Filter out blocked stories (stories with unresolved blockers)
-  const unblocked = stories.filter((s) => {
-    if (!s.blockedByDeps || s.blockedByDeps.length === 0) return true;
-    return s.blockedByDeps.every((dep) => dep.blocker.status === "DONE");
-  });
+    // Sort by priority mapping (DB sorts alphabetically, we need CRITICAL > HIGH > MEDIUM > LOW)
+    stories.sort(
+      (a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3)
+    );
 
-  if (unblocked.length === 0) {
-    console.log(`[agent-trigger] findNextStory: all eligible stories are blocked`);
-    return null;
+    // Find first unblocked story
+    for (const s of stories) {
+      if (!s.blockedByDeps || s.blockedByDeps.length === 0) return s;
+      if (s.blockedByDeps.every((dep) => dep.blocker.status === "DONE")) return s;
+    }
+
+    // All in this batch were blocked, try next batch
+    skip += batchSize;
+
+    // Safety limit to avoid infinite loops
+    if (skip > 500) {
+      console.log(`[agent-trigger] findNextStory: checked 500+ stories, all blocked`);
+      return null;
+    }
   }
-
-  // Sort by priority (CRITICAL first), then by creation date
-  unblocked.sort(
-    (a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3)
-  );
-
-  // PRO_MAX priority queue: if enabled, always pick the highest priority story
-  // (already sorted by priority above, so the first element is highest priority)
-  // For non-priority-queue plans, behavior is the same — priority then creation date
-  return unblocked[0];
 }
 
 /**

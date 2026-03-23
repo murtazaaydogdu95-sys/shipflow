@@ -27,6 +27,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
   const status = searchParams.get("status");
   const sprintId = searchParams.get("sprintId");
   const search = searchParams.get("search");
+  const pageParam = searchParams.get("page");
+  const limitParam = searchParams.get("limit");
 
   const where: Record<string, unknown> = { projectId };
   if (status) where.status = status;
@@ -38,18 +40,51 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
     ];
   }
 
+  // Pagination: if page or limit is provided, use paginated response
+  const hasPagination = pageParam !== null || limitParam !== null;
+  const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
+  const limit = Math.min(500, Math.max(1, parseInt(limitParam || "50", 10) || 50));
+  const maxUnpaginated = 500;
+
+  const includeRelations = {
+    labels: { include: { label: true } },
+    acceptanceCriteria: { orderBy: { position: "asc" as const } },
+    assignee: { select: { id: true, name: true, image: true } },
+    parent: { select: { id: true, shortId: true, title: true } },
+    children: { select: { id: true, shortId: true, title: true, status: true } },
+    blockedByDeps: { include: { blocker: { select: { id: true, shortId: true, title: true, status: true } } } },
+    blockingDeps: { include: { blocked: { select: { id: true, shortId: true, title: true, status: true } } } },
+  };
+
+  if (hasPagination) {
+    const [stories, total] = await Promise.all([
+      prisma.story.findMany({
+        where,
+        include: includeRelations,
+        orderBy: { position: "asc" },
+        take: limit,
+        skip: (page - 1) * limit,
+      }),
+      prisma.story.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      stories,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  }
+
+  // Backward-compatible: return flat array, capped at 500
   const stories = await prisma.story.findMany({
     where,
-    include: {
-      labels: { include: { label: true } },
-      acceptanceCriteria: { orderBy: { position: "asc" } },
-      assignee: { select: { id: true, name: true, image: true } },
-      parent: { select: { id: true, shortId: true, title: true } },
-      children: { select: { id: true, shortId: true, title: true, status: true } },
-      blockedByDeps: { include: { blocker: { select: { id: true, shortId: true, title: true, status: true } } } },
-      blockingDeps: { include: { blocked: { select: { id: true, shortId: true, title: true, status: true } } } },
-    },
+    include: includeRelations,
     orderBy: { position: "asc" },
+    take: maxUnpaginated,
   });
 
   return NextResponse.json(stories);
