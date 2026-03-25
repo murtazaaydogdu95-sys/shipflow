@@ -8,7 +8,7 @@ function useHasMounted() {
   return useSyncExternalStore(emptySubscribe, () => true, () => false);
 }
 
-const LAUNCH_DATE = new Date("2026-03-28T16:00:00");
+const DEFAULT_LAUNCH_DATE = new Date("2026-03-28T16:00:00");
 
 interface TimeLeft {
   days: number;
@@ -17,9 +17,9 @@ interface TimeLeft {
   seconds: number;
 }
 
-function calculateTimeLeft(): TimeLeft {
+function calculateTimeLeft(launchDate: Date): TimeLeft {
   const now = new Date();
-  const diff = LAUNCH_DATE.getTime() - now.getTime();
+  const diff = launchDate.getTime() - now.getTime();
 
   if (diff <= 0) {
     return { days: 0, hours: 0, minutes: 0, seconds: 0 };
@@ -47,15 +47,34 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 }
 
 export function CountdownTimer() {
-  const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft);
+  const [launchDate, setLaunchDate] = useState<Date>(DEFAULT_LAUNCH_DATE);
+  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => calculateTimeLeft(DEFAULT_LAUNCH_DATE));
   const mounted = useHasMounted();
+
+  // Fetch configured launch date from API
+  useEffect(() => {
+    fetch("/api/launch-date")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.launchDate) {
+          const d = new Date(data.launchDate);
+          if (!isNaN(d.getTime())) {
+            setLaunchDate(d);
+            setTimeLeft(calculateTimeLeft(d));
+          }
+        }
+      })
+      .catch(() => {
+        // Use default launch date on error
+      });
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft(calculateTimeLeft());
+      setTimeLeft(calculateTimeLeft(launchDate));
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [launchDate]);
 
   if (!mounted) return null;
 
