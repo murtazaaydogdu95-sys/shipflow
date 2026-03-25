@@ -147,6 +147,30 @@ export function dailyDigestEmail({
   };
 }
 
+export function launchDateUpdatedEmail({
+  orgName,
+  updaterName,
+  launchDate,
+}: {
+  orgName: string;
+  updaterName: string;
+  launchDate: string;
+}) {
+  return {
+    subject: `Launch date updated for ${orgName}`,
+    html: layout(
+      `
+      <h2 style="margin:0 0 16px;font-size:18px;">Launch Date Updated</h2>
+      <p style="margin:0 0 8px;color:#374151;"><strong>${esc(updaterName)}</strong> updated the launch date for <strong>${esc(orgName)}</strong>:</p>
+      <div style="margin:0 0 24px;padding:16px;background:#f3f4f6;border-radius:8px;text-align:center;">
+        <p style="margin:0;font-size:20px;font-weight:700;color:#111827;">${esc(launchDate)}</p>
+      </div>
+      <p style="margin:0;color:#6b7280;font-size:14px;">Make sure your team is prepared for launch. All scheduled notifications will use this updated date.</p>
+      `
+    ),
+  };
+}
+
 export function agentCompletedEmail({
   storyTitle,
   projectName,

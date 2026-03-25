@@ -108,6 +108,7 @@ model Organization {
   projects         Project[]
   invites          OrgInvite[]
   auditLogs        AuditLog[]
+  launchDate       DateTime?
   subscription     Subscription?
   usersWithCurrent User[]        @relation("UserCurrentOrg")
   createdAt        DateTime      @default(now())

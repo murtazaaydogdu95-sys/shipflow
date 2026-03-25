@@ -21,6 +21,12 @@ import {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function toLocalDatetimeString(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function OrgSettingsPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -30,6 +36,11 @@ export default function OrgSettingsPage() {
     fetcher
   );
   const [name, setName] = useState("");
+  const [launchDate, setLaunchDate] = useState("");
+  const [launchDateInitialized, setLaunchDateInitialized] = useState(false);
+  const [savingLaunchDate, setSavingLaunchDate] = useState(false);
+  const [launchDateError, setLaunchDateError] = useState("");
+  const [launchDateSuccess, setLaunchDateSuccess] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -38,6 +49,53 @@ export default function OrgSettingsPage() {
   // Initialize name when org loads
   if (org && !name && org.name) {
     setName(org.name);
+  }
+
+  // Initialize launch date when org loads
+  if (org && !launchDateInitialized) {
+    if (org.launchDate) {
+      setLaunchDate(toLocalDatetimeString(org.launchDate));
+    }
+    setLaunchDateInitialized(true);
+  }
+
+  async function handleSaveLaunchDate() {
+    if (!orgId) return;
+    setLaunchDateError("");
+    setLaunchDateSuccess("");
+
+    if (!launchDate) {
+      setLaunchDateError("Please select a date and time");
+      return;
+    }
+
+    const d = new Date(launchDate);
+    if (isNaN(d.getTime())) {
+      setLaunchDateError("Invalid date format");
+      return;
+    }
+    if (d.getTime() < Date.now()) {
+      setLaunchDateError("Launch date must be in the future");
+      return;
+    }
+
+    setSavingLaunchDate(true);
+    try {
+      const res = await fetch(`/api/orgs/${orgId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ launchDate: d.toISOString() }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setLaunchDateError(data.error || "Failed to save launch date");
+        return;
+      }
+      await mutate();
+      setLaunchDateSuccess("Launch date saved. Email notifications sent to the team.");
+    } finally {
+      setSavingLaunchDate(false);
+    }
   }
 
   async function handleSave() {
@@ -116,6 +174,46 @@ export default function OrgSettingsPage() {
           </Button>
         )}
       </div>
+
+      {isOwner && (
+        <div className="border-t pt-8 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Launch Date & Time</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Configure when your product launches. An email notification will be sent to all team members when updated.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="launch-date">Launch Date & Time</Label>
+            <Input
+              id="launch-date"
+              type="datetime-local"
+              value={launchDate}
+              onChange={(e) => {
+                setLaunchDate(e.target.value);
+                setLaunchDateError("");
+                setLaunchDateSuccess("");
+              }}
+              data-testid="launch-date-input"
+            />
+            {launchDateError && (
+              <p className="text-sm text-destructive">{launchDateError}</p>
+            )}
+            {launchDateSuccess && (
+              <p className="text-sm text-green-600 dark:text-green-400">{launchDateSuccess}</p>
+            )}
+          </div>
+
+          <Button
+            onClick={handleSaveLaunchDate}
+            disabled={savingLaunchDate || !launchDate}
+            data-testid="launch-date-save-btn"
+          >
+            {savingLaunchDate ? "Saving..." : "Save Launch Date"}
+          </Button>
+        </div>
+      )}
 
       {isOwner && (
         <div className="border-t pt-8 space-y-4">
