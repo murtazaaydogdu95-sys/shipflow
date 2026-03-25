@@ -19,10 +19,10 @@ export async function PATCH(
   if (!parsed.ok) return parsed.response;
   const { status, position } = moveStorySchema.parse(parsed.data);
 
-  // Look up project orgId for activity (safe to do outside tx)
+  // Look up project orgId and wipLimits for activity (safe to do outside tx)
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { orgId: true },
+    select: { orgId: true, wipLimits: true },
   });
 
   // Wrap find + validate + reposition in a transaction to prevent TOCTOU races
@@ -38,6 +38,23 @@ export async function PATCH(
           validTransitions: getValidTransitions(story.status),
           httpStatus: 422,
         } as const;
+      }
+
+      // Check WIP limit for target status (skip if request comes from API key / agent)
+      if (access.type === "session" && project?.wipLimits) {
+        const limits = project.wipLimits as Record<string, number | null>;
+        const limit = limits[status];
+        if (limit != null) {
+          const currentCount = await tx.story.count({
+            where: { projectId, status, id: { not: storyId } },
+          });
+          if (currentCount >= limit) {
+            return {
+              error: `WIP limit reached for ${status} (${currentCount}/${limit})`,
+              httpStatus: 422,
+            } as const;
+          }
+        }
       }
     }
 

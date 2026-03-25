@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { nanoid } from "nanoid";
+import { createHash } from "crypto";
 import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
@@ -113,6 +114,9 @@ export async function POST(req: Request) {
     select: { currentOrgId: true },
   });
 
+  const rawKey = nanoid(32);
+  const apiKeyHash = createHash("sha256").update(rawKey).digest("hex");
+
   const project = await prisma.project.create({
     data: {
       name: data.name,
@@ -121,7 +125,8 @@ export async function POST(req: Request) {
       techStack: data.language || undefined,
       githubRepo: data.htmlUrl,
       agentWorkingDir: targetDir,
-      apiKey: nanoid(32),
+      apiKey: rawKey,
+      apiKeyHash,
       orgId: user?.currentOrgId || undefined,
       members: {
         create: { userId: session.user.id, role: "OWNER" },
@@ -129,6 +134,15 @@ export async function POST(req: Request) {
       labels: {
         create: defaultLabels,
       },
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      techStack: true,
+      githubRepo: true,
+      createdAt: true,
     },
   });
 

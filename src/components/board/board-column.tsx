@@ -13,6 +13,8 @@ interface BoardColumnProps {
   id: string;
   title: string;
   stories: StoryWithRelations[];
+  wipLimit?: number | null;
+  totalCount?: number;
   onStoryClick: (story: StoryWithRelations) => void;
   onStoryDelete?: (storyId: string) => void;
 }
@@ -26,24 +28,44 @@ const columnColors: Record<string, string> = {
   DONE: "bg-green-500",
 };
 
-export const BoardColumn = React.memo(function BoardColumn({ id, title, stories, onStoryClick, onStoryDelete }: BoardColumnProps) {
+export const BoardColumn = React.memo(function BoardColumn({ id, title, stories, wipLimit, totalCount, onStoryClick, onStoryDelete }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const totalPoints = stories.reduce((sum, s) => sum + (s.storyPoints || 0), 0);
+
+  // Use totalCount (unfiltered) for WIP limit checking, fall back to stories.length
+  const count = totalCount ?? stories.length;
+  const isAtLimit = wipLimit != null && count >= wipLimit;
+  const isOverLimit = wipLimit != null && count > wipLimit;
 
   return (
     <div
       data-testid={`board-column-${id}`}
       className={cn(
         "flex flex-col w-72 min-w-[288px] bg-muted/30 rounded-xl",
-        isOver && "ring-2 ring-primary/50"
+        isOver && "ring-2 ring-primary/50",
+        isOverLimit && "ring-2 ring-red-500/60",
+        isAtLimit && !isOverLimit && "ring-2 ring-amber-500/60"
       )}
     >
       <div className="flex items-center gap-2 p-3 pb-2">
         <div className={cn("h-2 w-2 rounded-full", columnColors[id])} />
         <h3 className="text-sm font-semibold">{title}</h3>
-        <Badge variant="secondary" className="ml-auto text-xs">
-          {stories.length}
-        </Badge>
+        {wipLimit != null ? (
+          <Badge
+            variant="secondary"
+            className={cn(
+              "ml-auto text-xs",
+              isOverLimit && "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+              isAtLimit && !isOverLimit && "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+            )}
+          >
+            {count}/{wipLimit}
+          </Badge>
+        ) : (
+          <Badge variant="secondary" className="ml-auto text-xs">
+            {stories.length}
+          </Badge>
+        )}
         {totalPoints > 0 && (
           <Badge variant="outline" className="text-xs">
             {totalPoints} pts

@@ -13,7 +13,7 @@ import { FocusMode } from "@/components/board/focus-mode";
 import { StandupDialog } from "@/components/project/standup-dialog";
 import { EMPTY_FILTERS, type BoardFilterState } from "@/components/board/board-filters";
 import { KeyboardShortcutHelpDialog } from "@/components/board/keyboard-shortcut-help-dialog";
-import type { BoardColumn as BoardColumnType, StoryWithRelations } from "@/types";
+import type { BoardColumn as BoardColumnType } from "@/types";
 
 type ViewMode = "feed" | "board";
 

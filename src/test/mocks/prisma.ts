@@ -110,6 +110,8 @@ export function makeStoryData(overrides: Record<string, unknown> = {}) {
     userStory: null,
     reviewScore: null,
     reviewIssues: null,
+    reviewedAt: null,
+    reviewedBy: null,
     createdAt: new Date("2025-01-01"),
     updatedAt: new Date("2025-01-01"),
     ...overrides,

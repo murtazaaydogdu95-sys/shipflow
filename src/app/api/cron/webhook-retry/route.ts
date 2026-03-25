@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { attemptDelivery } from "@/lib/webhooks";
 import { timingSafeEqual } from "crypto";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function POST(req: Request) {
   const secret = req.headers.get("authorization")?.replace("Bearer ", "");
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
 
   let succeeded = 0;
   let failed = 0;
+  let deadLettered = 0;
 
   // Process in concurrent batches of 10 to avoid exceeding function timeout
   const CONCURRENCY = 10;
@@ -49,9 +51,11 @@ export async function POST(req: Request) {
             where: { id: delivery.id },
             select: { status: true },
           });
-          return updated?.status === "SUCCESS" ? "succeeded" : "failed";
+          if (updated?.status === "SUCCESS") return "succeeded";
+          if (updated?.status === "DEAD_LETTER") return "dead_letter";
+          return "failed";
         } catch (err) {
-          console.error(`[webhook-retry] Error processing ${delivery.id}:`, err);
+          console.error(`[webhook-retry] Error processing ${delivery.id}:`, sanitizeError(err, "Webhook retry failed"));
           await prisma.webhookDelivery.update({
             where: { id: delivery.id },
             data: { status: "PENDING" },
@@ -61,8 +65,13 @@ export async function POST(req: Request) {
       })
     );
     for (const r of results) {
-      if (r.status === "fulfilled" && r.value === "succeeded") succeeded++;
-      else failed++;
+      if (r.status === "fulfilled") {
+        if (r.value === "succeeded") succeeded++;
+        else if (r.value === "dead_letter") deadLettered++;
+        else failed++;
+      } else {
+        failed++;
+      }
     }
   }
 
@@ -71,5 +80,6 @@ export async function POST(req: Request) {
     processed: claimed.length,
     succeeded,
     failed,
+    deadLettered,
   });
 }

@@ -8,7 +8,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
   }
 
+  // Enforce body size limit (1MB) to prevent memory exhaustion
+  const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+  if (contentLength > 1_048_576) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
   const rawBody = await req.text();
+  if (rawBody.length > 1_048_576) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
   const signature = req.headers.get("paddle-signature") || "";
 
   if (!verifyWebhookSignature(rawBody, signature)) {

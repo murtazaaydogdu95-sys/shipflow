@@ -52,7 +52,17 @@ export async function POST(
       active: data.active,
       projectId,
     },
+    select: {
+      id: true,
+      url: true,
+      events: true,
+      active: true,
+      projectId: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 
+  // Return secret only on creation (only time user can see it)
   return NextResponse.json({ ...webhook, secret });
 }

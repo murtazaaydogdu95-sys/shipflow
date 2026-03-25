@@ -206,7 +206,7 @@ describe("webhooks", () => {
       );
     });
 
-    it("marks as FAILED when max attempts reached", async () => {
+    it("marks as DEAD_LETTER when max attempts reached on HTTP failure", async () => {
       const webhook = makeWebhook();
       const delivery = makeDelivery({ webhook, attempts: 4, maxAttempts: 5 });
 
@@ -217,18 +217,76 @@ describe("webhooks", () => {
         text: () => Promise.resolve("Service Unavailable"),
       });
       mockPrisma.webhookDelivery.update.mockResolvedValue({});
+      mockPrisma.activity.create.mockResolvedValue({});
 
       await attemptDelivery("delivery-1");
 
       expect(mockPrisma.webhookDelivery.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            status: "FAILED",
+            status: "DEAD_LETTER",
             attempts: 5,
             nextRetryAt: null,
           }),
         })
       );
+    });
+
+    it("logs activity when delivery enters dead letter queue", async () => {
+      const webhook = makeWebhook();
+      const delivery = makeDelivery({ webhook, attempts: 4, maxAttempts: 5 });
+
+      mockPrisma.webhookDelivery.findUnique.mockResolvedValue(delivery);
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: () => Promise.resolve("Service Unavailable"),
+      });
+      mockPrisma.webhookDelivery.update.mockResolvedValue({});
+      mockPrisma.activity.create.mockResolvedValue({});
+
+      await attemptDelivery("delivery-1");
+
+      expect(mockPrisma.activity.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: "WEBHOOK_DEAD_LETTER",
+            projectId: "project-1",
+            message: expect.stringContaining("story.moved"),
+          }),
+        })
+      );
+    });
+
+    it("marks as DEAD_LETTER when max attempts reached on network error", async () => {
+      const webhook = makeWebhook();
+      const delivery = makeDelivery({ webhook, attempts: 4, maxAttempts: 5 });
+
+      mockPrisma.webhookDelivery.findUnique.mockResolvedValue(delivery);
+      mockFetch.mockRejectedValue(new Error("Connection refused"));
+      mockPrisma.webhookDelivery.update.mockResolvedValue({});
+      mockPrisma.activity.create.mockResolvedValue({});
+
+      await attemptDelivery("delivery-1");
+
+      expect(mockPrisma.webhookDelivery.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "DEAD_LETTER",
+            attempts: 5,
+            errorMessage: "Connection refused",
+          }),
+        })
+      );
+    });
+
+    it("skips DEAD_LETTER deliveries", async () => {
+      const delivery = makeDelivery({ status: "DEAD_LETTER", webhook: makeWebhook() });
+      mockPrisma.webhookDelivery.findUnique.mockResolvedValue(delivery);
+
+      await attemptDelivery("delivery-1");
+
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it("handles fetch errors with retry", async () => {

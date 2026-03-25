@@ -28,10 +28,9 @@ interface ProjectsListProps {
     _count: { stories: number; sprints: number };
     sprints: Array<{ name: string; status: string }>;
   }>;
-  userId: string;
 }
 
-export function ProjectsList({ projects, userId }: ProjectsListProps) {
+export function ProjectsList({ projects }: ProjectsListProps) {
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [name, setName] = useState("");

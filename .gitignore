@@ -71,3 +71,11 @@ blob-report/
 e2e/.auth/
 
 pentest_agent.py
+
+# Claude Code / claude-flow runtime
+.claude/
+.claude-flow/
+.hive-mind/
+.swarm/
+.mcp.json
+swarm.config.json

@@ -87,6 +87,39 @@ export async function PATCH(
         { status: 422 }
       );
     }
+
+    // Enforce diff review before moving agent-completed stories to DONE
+    if (data.status === "DONE" && existing.status === "REVIEW" && existing.assignedToAgent) {
+      if (!existing.reviewedAt) {
+        return NextResponse.json(
+          { error: "Code review required before approval. View the diff first." },
+          { status: 422 }
+        );
+      }
+    }
+
+    // Check WIP limit for target status (skip for API key / agent access)
+    if (access.type === "session") {
+      const proj = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { wipLimits: true },
+      });
+      if (proj?.wipLimits) {
+        const limits = proj.wipLimits as Record<string, number | null>;
+        const limit = limits[data.status];
+        if (limit != null) {
+          const currentCount = await prisma.story.count({
+            where: { projectId, status: data.status, id: { not: storyId } },
+          });
+          if (currentCount >= limit) {
+            return NextResponse.json(
+              { error: `WIP limit reached for ${data.status} (${currentCount}/${limit})` },
+              { status: 422 }
+            );
+          }
+        }
+      }
+    }
   }
 
   // Handle label updates
@@ -121,9 +154,14 @@ export async function PATCH(
 
   const { labelIds, acceptanceCriteria, ...updateData } = data;
 
+  // Clear review confirmation when moving away from REVIEW
+  const reviewReset = (data.status && existing.status === "REVIEW" && data.status !== "REVIEW")
+    ? { reviewedAt: null, reviewedBy: null }
+    : {};
+
   const story = await prisma.story.update({
     where: { id: storyId },
-    data: updateData,
+    data: { ...updateData, ...reviewReset },
     include: {
       labels: { include: { label: true } },
       acceptanceCriteria: { orderBy: { position: "asc" } },

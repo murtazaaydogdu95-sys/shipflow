@@ -1,598 +1,282 @@
-# CodePylot
+# Claude Code Configuration — ShipFlow (CodePylot)
 
-AI-powered sprint board that turns your ideas into shipped code. Just write what you want — AI structures it into stories, and agents write the code for you.
+## Behavioral Rules (Always Enforced)
 
-## Features
+- Do what has been asked; nothing more, nothing less
+- NEVER create files unless they're absolutely necessary for achieving your goal
+- ALWAYS prefer editing an existing file to creating a new one
+- NEVER proactively create documentation files (*.md) or README files unless explicitly requested
+- NEVER save working files, text/mds, or tests to the root folder
+- Never continuously check status after spawning a swarm — wait for results
+- ALWAYS read a file before editing it
+- NEVER commit secrets, credentials, or .env files
 
-- **Quick Capture (Cmd+K)** — Global shortcut to jot down rough ideas with zero friction. No forms, just type.
-- **AI Story Rewrite** — One-click transforms rough ideas into structured user stories with title, description, acceptance criteria (Given/When/Then), story points, priority, and type. Powered by Anthropic, OpenAI, or Ollama.
-- **Kanban Board** — Drag-and-drop board with Icebox, Backlog, To Do, In Progress, Review, and Done columns. Keyboard navigation, bulk operations, inline editing, priority badges, story point estimates.
-- **Agent Automation** — Claude Code agents autonomously pick up TODO stories (respecting dependency blockers), create feature branches, write code, and open dev previews. Configurable up to 3 concurrent agents per project, priority-ordered queue.
-- **GitHub Integration** — Import repos, auto-link commits via `[SF-XXX]` tags, webhook-driven status updates, branch creation, push/merge from the UI, and auto-comment on PRs with story links.
-- **Sprint Management** — Create sprints with goals and date ranges. Assign stories to sprints. Track Planning, Active, and Completed sprint states.
-- **Sprint Analytics** — Velocity charts, burndown tracking, and completion rates across sprints powered by recharts.
-- **Billing & Plans** — Free tier (3 projects, 50 stories, 5 AI rewrites/day) and Pro tier ($19/mo — unlimited projects, stories, agent automation, GitHub integration). Lemon Squeezy integration for subscriptions.
-- **MCP Server** — Model Context Protocol server (`packages/mcp-server/`) enables Claude Code agents to interact with CodePylot: list stories, update status, add notes, complete stories.
-- **CLI Tool** — Command-line interface (`packages/cli/`) for managing stories: list, view, create, move, note, complete. Uses API key auth.
-- **Dark Mode** — Full dark/light theme support via next-themes with system preference detection.
-- **Auth** — GitHub OAuth, Google OAuth, credentials login with password hashing (bcrypt), and 2FA/TOTP support via NextAuth v5. JWT sessions.
-- **2FA/MFA** — TOTP-based two-factor authentication with QR code setup, backup codes (SHA-256 hashed), and login challenge flow.
-- **Password Reset** — Forgot password flow with email token (1-hour expiry) and bcrypt password hashing.
-- **GDPR Compliance** — Privacy policy and Terms of Service pages. Account deletion support.
-- **Landing Page** — Public marketing page at `/` with hero (animated countdown timer, rotating taglines), features, how-it-works, pricing, and footer. Dashboard at `/dashboard`.
-- **Launch Countdown** — Animated countdown timer integrated into the hero section with gradient purple numbers, glow effect, and "Launching in" / "We're Live" states. Component: `src/components/countdown-timer.tsx`.
-- **Dev Previews** — Auto-starts `next dev` on a free port after agent completes a story. Proxied through `/api/preview/[storyId]/` with URL rewriting for CSS/JS assets and redirect handling to keep navigation within the proxy.
-- **Story Dependencies** — Block stories on other stories. Visual blocker indicator on cards. Agent queue respects dependencies.
-- **Epics/Grouping** — Parent-child story hierarchy via `parentId`. Epic indicator on cards showing child count.
-- **File Attachments** — Upload files/screenshots to stories (10MB limit). Drag-and-drop upload with image preview.
-- **Bulk Operations** — Multi-select stories on the board. Bulk change status, priority, or delete. Toggle with `B` key.
-- **Keyboard Shortcuts** — Arrow keys to navigate board, Enter to open story, `B` for bulk mode, Space to select, Escape to exit.
-- **Export** — Download stories as CSV or JSON from the board toolbar. CSV export includes formula injection prevention.
-- **Idea Parking Lot** — Icebox/Someday column (hidden by default, toggle via snowflake button) for ideas not ready for the board.
-- **Today View** — Personal dashboard at `/today` showing active stories across all projects, sorted by priority.
-- **Agent Logs Viewer** — View agent output logs in the story detail modal. Live auto-refresh when agent is running.
-- **Undo/Revert Agent Work** — One-click revert of agent branches, resetting story to TODO.
-- **Outgoing Webhooks** — HMAC-SHA256 signed webhook dispatch on story events (created, moved, updated, agent completed). Delivery tracking with exponential backoff retries (5 attempts max, cron-driven).
-- **Health Check** — `GET /api/health` returns status with DB connectivity check. No auth required.
-- **Rate Limiting** — Upstash Redis rate limiting (with in-memory fallback for local dev) on auth routes (10 req/min, excluding `/api/auth/session`) and API routes (60 req/min). Fail-open on Redis errors.
-- **Audit Log** — Expanded audit logging for project/org CRUD operations with IP tracking.
-- **Admin Dashboard** — Admin-only page with user/project/story counts and user management.
-- **Public Roadmap** — Public page at `/roadmap` showing stories from public projects.
-- **Changelog** — Public page at `/changelog` rendering CHANGELOG.md with react-markdown.
-- **API Documentation** — Swagger UI at `/api/docs` serving an OpenAPI 3.0 spec.
-- **Email Digest** — Daily digest cron endpoint compiling unread notifications for users.
-- **Agent Failure Recovery** — Cron endpoint to detect stuck agents (>30min) and mark as FAILED.
-- **Git Diff Viewer** — Built-in diff viewer in story modal showing file-by-file colored diff with line numbers, additions/deletions, and collapsible file sections.
-- **AI Code Review** — Automated code review scores agent output 0-100 with issue-by-issue breakdown (severity, file, line, suggestion). Auto-triggered on agent completion.
-- **Multi-Agent** — Run up to 3 Claude Code agents in parallel per project. Configurable in project settings. REVIEW no longer blocks queue.
-- **Story Templates** — 8 built-in templates (auth page, CRUD endpoint, landing page, billing integration, etc.) pre-fill quick capture with structured stories.
-- **Natural Language Commands** — Type commands like "move SF-001 to done" or "prioritize SF-002 as high" directly in Quick Capture to execute board actions.
-- **Codebase-Aware Rewrites** — AI story rewrite includes project file structure and dependencies for context-aware story generation.
-- **Story Splitting** — AI splits large ideas into 3-5 smaller stories with inter-story dependencies. Bulk-creates all stories in a transaction.
-- **Focus Mode** — Three-panel immersive view: story details, code diff + AI review, agent logs + preview. Keyboard navigation (arrow keys, Escape). Press F on the board.
-- **Deploy Integration** — Deploy story branches to Vercel, Railway, Fly.io, or custom webhooks. Configure in project settings, trigger from story review panel.
-- **Daily Standup Summary** — AI-generated standup summary with completed, in-progress, blocked, and needs-review stories. Copy-to-clipboard for Slack/Discord.
-- **Recurring Stories** — Schedule repeating stories (daily, weekly, monthly) via cron. Configure in project settings. Cron endpoint: `POST /api/cron/recurring`.
-- **Mobile PWA** — Web App Manifest for installability on mobile. Standalone display mode, theme color, app icons.
-- **Browser Extension** — Chrome extension (`packages/browser-extension/`) for quick story capture from any webpage. Right-click "Send to CodePylot" context menu. Options page for API config.
+## File Organization
 
-## Quick Start (Docker)
-
-The fastest way to run the full stack:
-
-```bash
-# 1. Clone and start everything
-docker compose up --build
-
-# 2. Open the app
-open http://localhost:3000
-```
-
-This starts PostgreSQL, Ollama (with llama3.2), and CodePylot.
-
-**GitHub OAuth:** To enable GitHub login and repo import, set `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` in your `.env` file. The `.env` file is required by Docker Compose (`env_file`).
-
-### Docker Architecture
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  PostgreSQL │◄────│   CodePylot   │────►│   Ollama    │
-│  :5432      │     │   :3000      │     │   :11434    │
-└─────────────┘     └──────────────┘     └─────────────┘
-   pgdata              repos_data          ollama_data
-   (volume)            (volume)            (volume)
-```
-
-- **pgdata** — PostgreSQL data (persists across restarts)
-- **ollama_data** — Downloaded AI models
-- **repos_data** — GitHub-imported repository clones (`/app/repos` in container)
-
-### Useful Docker Commands
-
-```bash
-docker compose up --build       # Build and start all services
-docker compose up -d            # Start in background
-docker compose down             # Stop all services (data persists)
-docker compose down -v          # Stop and delete all data (clean slate)
-docker compose logs codepylot    # View app logs
-docker compose up postgres -d   # Start only PostgreSQL (for local dev)
-```
-
-## Quick Start (Local Dev)
-
-```bash
-# 1. Install dependencies
-npm install
-
-# 2. Copy environment file and fill in values
-cp .env.example .env
-
-# 3. Start PostgreSQL (via Docker or install locally)
-docker compose up postgres -d
-
-# 4. Push schema to PostgreSQL and generate Prisma client
-npx prisma db push
-
-# 5. Start dev server
-npm run dev
-```
-
-The app runs on `http://localhost:3000`. Sign in with GitHub, Google, or email/password.
-
-## Environment Variables
-
-```
-DATABASE_URL="postgresql://codepylot:codepylot@localhost:5432/codepylot"  # PostgreSQL
-AUTH_SECRET="<openssl rand -base64 32>"  # NextAuth secret (required)
-AUTH_GITHUB_ID=""                        # GitHub OAuth app ID
-AUTH_GITHUB_SECRET=""                    # GitHub OAuth app secret
-AUTH_GOOGLE_ID=""                        # Google OAuth client ID
-AUTH_GOOGLE_SECRET=""                    # Google OAuth client secret
-AUTH_TRUST_HOST=true                     # NextAuth trust host
-ANTHROPIC_API_KEY=""                     # Anthropic API key (for AI story rewrite)
-OLLAMA_URL="http://localhost:11434/v1"   # Ollama URL (http://ollama:11434/v1 in Docker)
-CODEPYLOT_REPOS_DIR=""                    # GitHub import clone dir (default: ~/.codepylot/repos, /app/repos in Docker)
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-RESEND_API_KEY=""                        # Resend API key (for email notifications)
-CRON_SECRET=""                           # Secret for cron endpoints (/api/cron/*)
-LEMONSQUEEZY_API_KEY=""                  # Lemon Squeezy API key
-LEMONSQUEEZY_STORE_ID=""                 # Lemon Squeezy store ID
-LEMONSQUEEZY_WEBHOOK_SECRET=""           # Lemon Squeezy webhook signing secret
-LEMONSQUEEZY_PRO_VARIANT_ID=""           # Lemon Squeezy variant ID for Pro plan
-SENTRY_DSN=""                            # Sentry DSN (optional, for error tracking)
-UPSTASH_REDIS_REST_URL=""                # Upstash Redis URL (for distributed rate limiting)
-UPSTASH_REDIS_REST_TOKEN=""              # Upstash Redis token (for distributed rate limiting)
-```
+- NEVER save to root folder — use the directories below
+- Use `/src` for source code files
+- Use `/tests` for test files
+- Use `/docs` for documentation and markdown files
+- Use `/config` for configuration files
+- Use `/scripts` for utility scripts
+- Use `/examples` for example code
 
 ## Tech Stack
 
-- **Framework:** Next.js 16 (App Router) + React 19 + TypeScript 5
-- **Styling:** Tailwind CSS v4 + shadcn/ui + framer-motion
-- **Database:** Prisma v6 + PostgreSQL
-- **Auth:** NextAuth v5 beta (JWT sessions, GitHub/Google/Credentials providers, TOTP 2FA)
-- **Drag & Drop:** @dnd-kit
-- **AI:** @anthropic-ai/sdk (also supports OpenAI, Ollama)
-- **Data Fetching:** SWR
-- **Charts:** recharts
-- **MCP:** @modelcontextprotocol/sdk (packages/mcp-server/)
-- **Rate Limiting:** @upstash/ratelimit + @upstash/redis (with in-memory fallback)
-- **Validation:** Zod v4
-- **Password Hashing:** bcryptjs
-- **2FA:** otpauth + qrcode
-- **Markdown:** react-markdown
-- **Unit Testing:** Vitest + @testing-library/react (454 tests)
-- **E2E Testing:** Playwright (71 tests, Chromium, `page.route()` mocking)
+- **Framework**: Next.js 16.1.6 (App Router) + TypeScript + React 19
+- **Styling**: Tailwind CSS v4 + shadcn/ui
+- **Database**: Prisma v6 (prisma-client-js) + PostgreSQL (via Docker)
+- **Auth**: NextAuth v5 beta (JWT sessions, GitHub/Google/Credentials providers)
+- **Drag & Drop**: @dnd-kit for Kanban board
+- **AI**: @anthropic-ai/sdk for story rewrite + agent code review
+- **Data Fetching**: SWR for client data, server components for SSR
+- **Charts**: recharts for analytics
+- **Animations**: framer-motion
+- **Notifications**: sonner (toasts), custom email templates
+- **MCP Server**: packages/mcp-server/ (agent communication)
 
-## Commands
+## Project Architecture
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Next.js dev server |
-| `npm run build` | Production build |
-| `npm run start` | Run production server |
-| `npm run lint` | ESLint |
-| `npm run test` | Run unit/integration tests (Vitest) |
-| `npm run test:e2e` | Run E2E tests (Playwright) |
-| `npm run test:e2e:ui` | Run E2E tests with Playwright UI |
-| `npm run test:e2e:headed` | Run E2E tests in headed browser |
-| `npm run test:e2e:report` | Open Playwright HTML report |
-| `npx prisma db push` | Push schema changes to PostgreSQL |
-| `npx prisma studio` | Open Prisma Studio GUI |
+- Follow Domain-Driven Design with bounded contexts
+- Keep files under 500 lines
+- Use typed interfaces for all public APIs
+- Prefer TDD London School (mock-first) for new code
+- Ensure input validation at system boundaries with Zod schemas
+- Use Prisma parameterized queries (never raw SQL except `$queryRaw` with `$1` placeholders)
 
-## Testing
+### Core Flow (Idea → Code → Review → Deploy)
 
-### Unit & Integration Tests (Vitest)
+1. User creates a story (quick capture via Cmd+K or manual)
+2. AI rewrites raw input into structured story (acceptance criteria, story points, priority)
+3. Agent auto-assigns based on priority and queue availability
+4. Agent creates branch, writes code, calls MCP tools
+5. Story moves to REVIEW when agent calls `complete_story`
+6. **User must view the diff** before approval (server-side enforced via `reviewedAt`/`reviewedBy`)
+7. Diff viewer shows risk indicators (secrets, eval, XSS, raw SQL, debug logging, env vars, TODOs)
+8. User approves → code merges to main; or rejects with feedback → agent re-triggers
+9. Agent learning: last 5 rejection patterns included in next agent prompt context
 
-454 tests across 24 files. Run with `npm run test` (uses `vitest`). Config: `vitest.config.ts`.
+### Key Paths
 
-- Tests live alongside source files as `*.test.ts` / `*.test.tsx`
-- Uses `@testing-library/react` for component tests
-- Test setup: `src/test/setup.ts`
+- **Schema**: prisma/schema.prisma
+- **Auth**: src/lib/auth.ts (NextAuth config, auto-creates org on signup)
+- **Prisma singleton**: src/lib/prisma.ts
+- **API auth**: src/lib/api-auth.ts (requireProjectAccess helper)
+- **Permissions**: src/lib/permissions.ts (RBAC: OWNER/ADMIN/MEMBER)
+- **Plan limits**: src/lib/plan-limits.ts (org-based limits)
+- **AI rewrite**: src/lib/ai-rewrite.ts (system/user message separation)
+- **Agent orchestration**: src/lib/agent-trigger.ts (thin orchestrator)
+- **Agent queue**: src/lib/agent-queue.ts (slot claiming, priority ordering)
+- **Agent executor**: src/lib/agent-executor.ts (process spawning, branch management)
+- **Webhooks**: src/lib/webhooks.ts (delivery with DLQ)
+- **Encryption**: src/lib/encryption.ts (AES-256-GCM)
+- **Rate limiting**: src/lib/rate-limit.ts (API, AI, auth limiters)
+- **Board**: src/components/board/kanban-board.tsx
+- **Story modal**: src/components/stories/story-detail-modal.tsx
+- **Diff viewer**: src/components/stories/diff-viewer.tsx (with risk detection)
+- **Review panel**: src/components/stories/story-review-panel.tsx
+- **Public board**: src/app/board/[slug]/page.tsx
 
-### E2E Tests (Playwright)
+### Multi-Tenant Architecture
 
-71 tests across 12 spec files. Run with `npm run test:e2e`. Config: `playwright.config.ts`.
+- Organization model owns Projects and billing (Paddle subscription per org)
+- OrgMember with RBAC roles: OWNER, ADMIN, MEMBER
+- User.currentOrgId tracks active org, exposed via JWT session.user.orgId
+- All project routes use requireProjectAccess() helper for auth
+- Billing is org-level: Paddle webhook/portal use org metadata
+- New users auto-get a personal workspace org on signup
 
-**Architecture:**
-- Tests run against the Next.js dev server on port 3001 connected to a seeded test PostgreSQL (`codepylot_test` DB)
-- `page.route()` intercepts client-side API calls for write operations (no MSW)
-- GET/read requests pass through to the real seeded DB; only writes are mocked
-- Auth handled via Playwright's `storageState` — `e2e/auth.setup.ts` logs in once, saves JWT cookie
-- `NEXT_TEST_MODE=1` env var uses a separate `.next-test/` build dir to avoid lock conflicts
+### Plan Limits
 
-**Structure:**
-```
-e2e/
-├── auth.setup.ts                    # One-time login, saves auth state
-├── global-setup.ts                  # Runs DB seed before all tests
-├── seed-test-db.ts                  # Seeds test user, org, project, stories, sprints
-├── fixtures/
-│   ├── auth.fixture.ts              # authenticatedPage fixture (pre-authed page)
-│   ├── test-data.ts                 # Shared constants (TEST_PROJECT, TEST_STORIES, etc.)
-│   └── api-handlers.ts             # Reusable route mock helpers (setupBoardHandlers, etc.)
-├── helpers/
-│   └── page-objects/
-│       ├── board.page.ts            # Board navigation, columns, story cards
-│       ├── quick-capture.page.ts    # Cmd+K → Create Story flow
-│       ├── story-modal.page.ts      # Story detail sheet interactions
-│       ├── settings.page.ts         # Project settings page
-│       └── sprints.page.ts          # Sprint management page
-├── auth.spec.ts                     # Login, session persistence, logout (7 tests)
-├── dashboard.spec.ts                # Project list, create project (5 tests)
-├── board.spec.ts                    # Columns, cards, drag-drop, keyboard nav (8 tests)
-├── quick-capture.spec.ts            # Quick capture dialog, templates (6 tests)
-├── ai-rewrite.spec.ts               # AI rewrite flow, error handling (6 tests)
-├── story-detail.spec.ts             # Story modal, edit, tabs (9 tests)
-├── comments.spec.ts                 # Comment CRUD (4 tests)
-├── sprints.spec.ts                  # Sprint list, create, status (5 tests)
-├── bulk-operations.spec.ts          # Bulk select, move, delete (7 tests)
-├── agent.spec.ts                    # Agent trigger, logs, revert (5 tests)
-├── export.spec.ts                   # CSV/JSON export (3 tests)
-└── settings.spec.ts                 # Project settings, webhooks (6 tests)
-```
+| Tier | Projects | Stories/Project | AI Rewrites/Month | Model | Agents | Priority Queue |
+|------|----------|-----------------|-------------------|-------|--------|---------------|
+| FREE | 3 | 15 | 15 | Haiku | 1 | No |
+| PRO | Unlimited | Unlimited | 50 | Sonnet | 3 | No |
+| PRO_MAX | Unlimited | Unlimited | Unlimited | Sonnet | 5 | Yes |
 
-**Key conventions:**
-- Page objects use `data-testid` attributes for reliable selectors (e.g., `story-card-{shortId}`, `board-column-{status}`)
-- Page objects include error boundary retry logic for dev server resilience
-- `makeStory()` factory in `test-data.ts` creates mock stories matching the API shape
-- Radix UI portals (Select, Sheet) need special handling: use `element.evaluate((el) => el.click())` for DOM-level click when elements render outside viewport
-- Use `.first()` when `getByRole("option")` might match both the option and inner span (Radix strict mode)
-- Scope `getByText()` to a container (e.g., `modal.sheet.getByText()`) to avoid matching header/sidebar elements
+## Build & Test
 
-**data-testid attributes** (added to source components for E2E selectors):
+```bash
+# Build
+npm run build
 
-| Component | Element | `data-testid` |
-|-----------|---------|---------------|
-| Login page | email/password/submit/github | `login-email`, `login-password`, `login-submit`, `login-github` |
-| Board column | column container | `board-column-{STATUS}` |
-| Story card | card root | `story-card-{shortId}` |
-| Kanban board | export button | `board-export-btn` |
-| Kanban board | bulk toggle | `board-bulk-toggle` |
-| Kanban board | icebox toggle | `board-icebox-toggle` |
-| Quick capture | textarea/rewrite/create | `quick-capture-input`, `rewrite-ai-btn`, `quick-capture-create-btn` |
-| Story detail | title/save/comment input/submit | `story-detail-title`, `story-detail-save`, `story-detail-comment-input`, `story-detail-comment-submit` |
-| Sprint manager | create button | `create-sprint-btn` |
-| Settings page | project name/save/auto-assign/webhook | `settings-project-name`, `settings-save-btn`, `settings-auto-assign`, `webhook-url-input`, `webhook-add-btn` |
+# Test (Vitest)
+npm test
 
-## Project Structure
+# Lint
+npm run lint
 
-```
-CodePylot/
-├── e2e/                         # Playwright E2E tests (71 tests, 12 spec files)
-│   ├── fixtures/                # Auth fixture, test data, API mock handlers
-│   ├── helpers/page-objects/    # Page objects (board, settings, sprints, etc.)
-│   └── *.spec.ts                # Test specs (auth, board, comments, etc.)
-├── prisma/
-│   ├── schema.prisma            # Database schema (all models)
-│   └── seed.ts                  # Database seeder
-├── packages/
-│   ├── mcp-server/              # MCP server for Claude Code integration
-│   │   └── src/index.ts
-│   ├── cli/                     # CLI tool (codepylot command)
-│   │   └── src/index.ts
-│   └── browser-extension/       # Chrome extension for quick capture
-│       ├── manifest.json        # Chrome Manifest V3
-│       ├── popup/               # Quick capture popup
-│       ├── background/          # Context menu service worker
-│       ├── options/             # API config page
-│       └── icons/               # Extension icons
-├── public/
-│   ├── manifest.json            # PWA Web App Manifest
-│   ├── icons/                   # PWA app icons (192, 512)
-│   ├── openapi.yaml             # OpenAPI 3.0 spec
-│   └── uploads/                 # File attachments (gitignored)
-├── src/
-│   ├── app/
-│   │   ├── (auth)/
-│   │   │   ├── login/           # Login page
-│   │   │   ├── forgot-password/ # Password reset request
-│   │   │   ├── reset-password/  # Password reset form
-│   │   │   └── verify-2fa/      # 2FA challenge page
-│   │   ├── dashboard/page.tsx   # Dashboard (project list, /dashboard)
-│   │   ├── (dashboard)/
-│   │   │   ├── projects/[projectId]/
-│   │   │   │   ├── page.tsx         # Kanban board
-│   │   │   │   ├── settings/        # Project settings (webhooks, public roadmap toggle)
-│   │   │   │   ├── sprints/         # Sprint management
-│   │   │   │   └── analytics/       # Velocity charts
-│   │   │   ├── today/           # Personal today view
-│   │   │   ├── admin/           # Admin dashboard
-│   │   │   └── account/security/# 2FA setup page
-│   │   ├── roadmap/             # Public roadmap page
-│   │   ├── changelog/           # Public changelog page
-│   │   ├── api/
-│   │   │   ├── auth/[...nextauth]   # NextAuth endpoints
-│   │   │   ├── auth/forgot-password # Password reset token generation
-│   │   │   ├── auth/reset-password  # Password reset handler
-│   │   │   ├── account/2fa/         # 2FA setup, verify, disable, challenge
-│   │   │   ├── admin/               # Admin stats + user list
-│   │   │   ├── health/              # Health check endpoint
-│   │   │   ├── docs/                # Swagger UI
-│   │   │   ├── cron/                # Digest + agent cleanup + recurring stories + webhook retry cron
-│   │   │   ├── projects/            # Project CRUD + nested routes
-│   │   │   │   └── [projectId]/
-│   │   │   │       ├── stories/             # Story CRUD, rewrite, move
-│   │   │   │       │   ├── [storyId]/
-│   │   │   │       │   │   ├── dependencies/  # Story dependency management
-│   │   │   │       │   │   ├── attachments/   # File upload/list
-│   │   │   │       │   │   ├── logs/          # Agent log viewer
-│   │   │   │       │   │   ├── revert/        # Revert agent work
-│   │   │   │       │   │   ├── comments/      # Story comments
-│   │   │   │       │   │   ├── move/          # Move story between columns
-│   │   │   │       │   │   ├── preview/       # Dev preview management
-│   │   │   │       │   │   ├── trigger-agent/ # Manual agent trigger
-│   │   │   │       │   │   ├── diff/          # Git diff for agent branch
-│   │   │   │       │   │   ├── review/        # AI code review (score + issues)
-│   │   │   │       │   │   └── deploy/        # Deploy story branch
-│   │   │   │       │   ├── bulk/            # Bulk update/delete stories
-│   │   │   │       │   ├── bulk-create/     # Bulk create (story splitting)
-│   │   │   │       │   ├── split/           # AI story splitting
-│   │   │   │       │   └── export/          # Export stories as CSV/JSON
-│   │   │   │       ├── sprints/     # Sprint CRUD
-│   │   │   │       ├── recurring/   # Recurring story management
-│   │   │   │       ├── standup/     # AI standup summary
-│   │   │   │       ├── webhooks/    # Outgoing webhook CRUD
-│   │   │   │       ├── git-push/    # Git commit + push + merge
-│   │   │   │       └── webhook/     # GitHub incoming webhook handler
-│   │   │   ├── github/              # GitHub repo import
-│   │   │   └── preview/             # Agent preview proxy
-│   │   ├── page.tsx                 # Public landing page (/)
-│   │   ├── layout.tsx               # Root layout
-│   │   └── globals.css              # Tailwind globals
-│   ├── components/
-│   │   ├── board/                   # Kanban board (dnd-kit), column, card, filters, focus mode
-│   │   ├── feed/                    # Pipeline feed view
-│   │   ├── landing/                 # Landing page sections (navbar, hero, features, pricing, etc.)
-│   │   ├── stories/                 # Story modals, quick capture, diff viewer, AI review, templates, splitter
-│   │   ├── today/                   # Today view component
-│   │   ├── sprints/                 # Sprint manager, velocity chart
-│   │   ├── projects/                # Project list, GitHub import, standup dialog, recurring stories
-│   │   ├── layout/                  # Header, sidebar, theme toggle, command palette
-│   │   ├── providers/               # Session, theme, quick-capture context
-│   │   └── ui/                      # shadcn/ui components
-│   ├── hooks/
-│   │   └── use-solo-mode.ts         # Solo mode detection hook
-│   ├── lib/
-│   │   ├── auth.ts                  # NextAuth config (credentials + bcrypt + 2FA)
-│   │   ├── prisma.ts                # Prisma singleton
-│   │   ├── api-auth.ts              # Auth helpers (session + API key)
-│   │   ├── agent-trigger.ts         # Agent spawn & queue (multi-agent, respects deps)
-│   │   ├── preview-manager.ts       # Dev server preview lifecycle
-│   │   ├── ai-rewrite.ts            # AI providers (Anthropic/OpenAI/Ollama)
-│   │   ├── diff-parser.ts           # Unified diff parser
-│   │   ├── story-templates.ts       # 8 built-in story templates
-│   │   ├── command-parser.ts        # Natural language command parser
-│   │   ├── webhooks.ts              # Outgoing webhook dispatch (HMAC-SHA256) with delivery tracking + retries
-│   │   ├── story-state-machine.ts   # Story status transition validation (isValidTransition, getValidTransitions)
-│   │   ├── api-error.ts             # Error sanitization (stripSecrets, sanitizeError) + parseJsonBody size limits
-│   │   ├── audit-log.ts             # Audit log helper
-│   │   ├── admin.ts                 # Admin auth helper
-│   │   ├── notifications.ts         # Notification creation + email dispatch
-│   │   ├── email.ts                 # Email sending (Resend)
-│   │   ├── email-templates.ts       # Email templates (reset, digest, assigned, etc.)
-│   │   ├── rate-limit.ts            # Upstash Redis rate limiting (in-memory fallback)
-│   │   ├── permissions.ts           # RBAC (OWNER/ADMIN/MEMBER)
-│   │   ├── plan-limits.ts           # Org-based plan limits
-│   │   ├── lemonsqueezy.ts            # Lemon Squeezy helpers
-│   │   ├── utils.ts                 # cn() utility
-│   │   └── validations/             # Zod schemas (story, project, sprint, webhook, comment, recurring)
-│   ├── types/index.ts               # TypeScript types & constants
-│   └── middleware.ts                # Auth middleware + rate limiting + 2FA redirect
-├── vitest.config.ts             # Vitest config (unit/integration tests)
-├── playwright.config.ts         # Playwright config (E2E tests)
-├── CHANGELOG.md                 # Project changelog
-├── .github/
-│   └── workflows/
-│       └── ci.yml               # GitHub Actions CI/CD (lint, build, Docker deploy to VPS)
-├── Dockerfile                   # Multi-stage build (deps → builder → runner)
-├── docker-compose.yml           # PostgreSQL + Ollama + CodePylot (local dev)
-├── docker-compose.prod.yml      # Production compose for VPS (pulls pre-built image from GHCR)
-├── docker-entrypoint.sh         # Wait for DB, push schema, seed, start
-├── .dockerignore
-└── package.json
+# Prisma generate (after schema changes)
+npx prisma generate
+
+# Prisma push (apply schema to DB)
+npx prisma db push
 ```
 
-## Database Models
+- ALWAYS run tests after making code changes
+- ALWAYS verify build succeeds before committing
+- ALWAYS run `npx prisma generate` after schema changes
+- Current test suite: 29 files, 515+ tests
 
-**Core models** (see `prisma/schema.prisma` for full schema):
+### Prisma Notes
 
-- **User** — NextAuth user with email, name, image, passwordHash, 2FA fields (totpSecret, totpEnabled, totpBackupCodes), isAdmin flag
-- **Organization** — Multi-tenant org with plan, Lemon Squeezy customer ID, members
-- **OrgMember** — RBAC roles: OWNER, ADMIN, MEMBER
-- **Project** — Has name, slug, techStack, githubRepo, agent config, AI config, isPublic, webhooks, deploy config, maxConcurrentAgents
-- **Story** — shortId (SF-001), title, description, status, priority, type, storyPoints, parentId (for epics), agent fields, branch/commit/preview info, AI review fields, deploy fields
-- **StoryDependency** — Blocker/blocked relationship between stories
-- **Attachment** — File attachments on stories (filename, url, size, mimeType)
-- **AcceptanceCriterion** — Given/When/Then format, linked to Story
-- **Sprint** — name, goal, status (PLANNING/ACTIVE/COMPLETED), date range
-- **Label** — name + color, scoped per project
-- **Activity** — Audit log (STORY_CREATED, STORY_MOVED, AGENT_TRIGGERED, PROJECT_CREATED, etc.)
-- **Comment** — Story comments with user attribution
-- **Notification** — In-app notifications (assigned, status changed, agent completed)
-- **Webhook** — Outgoing webhook config (url, events, HMAC secret, active flag)
-- **WebhookDelivery** — Delivery tracking with status (PENDING/SUCCESS/FAILED), retry count, exponential backoff, response logging
-- **AuditLog** — Org-level audit log with action, details, IP address
-- **Subscription** — Lemon Squeezy subscription tracking (org or user level)
-- **RecurringStory** — Scheduled repeating stories (daily/weekly/monthly) with frequency config
-
-### Story Statuses
-`ICEBOX` | `BACKLOG` → `TODO` → `IN_PROGRESS` → `REVIEW` → `DONE`
-
-- `ICEBOX` — Someday/parking lot. Hidden column on board by default (toggle with snowflake button).
-- `BACKLOG` through `DONE` — Standard board columns, always visible.
-
-**State machine enforced** via `src/lib/story-state-machine.ts`. Invalid transitions return 422. Valid transitions:
-
-| From | Allowed To |
-|------|-----------|
-| ICEBOX | BACKLOG, TODO |
-| BACKLOG | ICEBOX, TODO |
-| TODO | BACKLOG, ICEBOX, IN_PROGRESS |
-| IN_PROGRESS | TODO, REVIEW, DONE |
-| REVIEW | IN_PROGRESS, TODO, DONE |
-| DONE | REVIEW, TODO |
-
-**Sprint state machine:** PLANNING → ACTIVE → COMPLETED (no skipping, no reversal).
-
-### Story Types
-`feature` | `bug` | `chore` | `refactor` | `docs` | `test`
-
-Types determine branch prefixes (`feat/`, `bug/`, `chore/`, etc.) and commit message prefixes (`feat`, `fix`, `chore`, etc.).
-
-### Priorities
-`CRITICAL` | `HIGH` | `MEDIUM` | `LOW`
-
-## How It Works (End to End)
-
-### 1. Capture an Idea
-Open Quick Capture (Cmd+K) and type a rough idea like "add webhook for failed payments". Optionally click "Rewrite with AI" to transform it into a structured story with title, user story, acceptance criteria, points, and priority. Use ICEBOX status for ideas you're not ready to work on yet.
-
-### 2. Manage on the Board
-Stories appear on the Kanban board. Drag and drop between columns. Click a story to edit details, change priority/type, view acceptance criteria, manage dependencies, upload attachments, or view agent logs. Use keyboard shortcuts (arrow keys, Enter, B for bulk) for fast navigation. Export stories as CSV or JSON from the toolbar.
-
-### 3. Agent Implementation (Optional)
-Configure a project's working directory and API key in Settings. Enable auto-assign to let Claude Code agents pick up stories automatically:
-
-1. Agent picks highest-priority unblocked TODO story (respects dependency blockers)
-2. Creates a branch: `{type-prefix}/{shortId}-{slug}` (e.g., `feat/SF-001-login-page`)
-3. Spawns Claude Code CLI with MCP config pointing to CodePylot
-4. Agent implements the story, calling MCP tools to update status
-5. On completion, story moves to REVIEW and a dev preview starts
-6. View live agent logs in the story detail modal
-
-### 4. Review & Approve
-In the story detail modal, review the agent's work:
-- **Approve** — merges branch to main, pushes, moves to DONE
-- **Request Changes** — sends feedback, re-triggers agent on same branch
-- **Revert** — deletes agent branch, resets story to TODO
-
-### 5. GitHub Integration
-Set up a webhook in project settings. On push events with `[SF-XXX]` in commit messages, stories auto-complete. PRs with `[SF-XXX]` in the title get auto-comments linking to the story.
-
-### 6. Today View
-Visit `/today` for a personal dashboard showing all your active stories across projects, sorted by priority. Sections: In Progress, Needs Review, Up Next, Recently Completed.
-
-## Agent System
-
-The agent system (`src/lib/agent-trigger.ts`) manages autonomous Claude Code agents:
-
-- **Queue:** Configurable concurrency (1-3 agents per project via `maxConcurrentAgents`). REVIEW stories no longer block queue.
-- **Priority:** CRITICAL → HIGH → MEDIUM → LOW, then by creation date.
-- **Dependencies:** Agent skips blocked stories (stories with unresolved StoryDependency blockers).
-- **Timeout:** Stuck agents (RUNNING > 30min) are marked FAILED by the cleanup cron (`/api/cron/agent-cleanup`).
-- **Branch prefixes** by story type: feature→`feat/`, bug→`bug/`, chore→`chore/`, refactor→`refactor/`, docs→`docs/`, test→`test/`
-- **Commit prefixes** by story type: feature→`feat`, bug→`fix`, chore→`chore`, refactor→`refactor`, docs→`docs`, test→`test`
-- **MCP tools** available to agent: `list_stories`, `get_story`, `get_next_story`, `update_story_status`, `complete_story`, `add_note`
-- **Logs:** Agent output written to `/tmp/codepylot-agent-{storyId}.log`. Viewable in story detail modal via `/api/projects/[projectId]/stories/[storyId]/logs`.
-- **Preview:** Auto-starts `npx next dev` on a free port after agent completes. Proxied through `/api/preview/[storyId]/` with HTML URL rewriting (`/_next/` → proxy path) and redirect interception (`redirect: "manual"` + Location header rewriting).
-- **Revert:** `POST /api/projects/[projectId]/stories/[storyId]/revert` deletes the agent branch and resets the story.
-- **AI Review:** Auto-triggered on agent completion. Scores code 0-100 with issue-by-issue breakdown.
-
-## API Authentication
-
-All API routes support two auth methods:
-1. **Session auth** — NextAuth JWT session (browser)
-2. **API key auth** — `Authorization: Bearer <project-api-key>` (used by MCP server, CLI, and external integrations)
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `Cmd+K` | Open Quick Capture |
-| Arrow keys | Navigate board columns/stories |
-| `Enter` | Open focused story detail |
-| `B` | Toggle bulk selection mode |
-| `Space` | Select/deselect story (in bulk mode) |
-| `F` | Enter Focus Mode with current story |
-| `Escape` | Exit bulk mode / Exit Focus Mode |
-
-## Key Conventions
-
-- **Prisma v6** — Import from `@prisma/client` (not `@/generated/prisma`)
-- **Prisma singleton** — Always use `import { prisma } from "@/lib/prisma"`
-- **Validation** — Zod schemas in `src/lib/validations/` for all API inputs
-- **UI components** — Use shadcn/ui from `@/components/ui/`
-- **Utilities** — `cn()` from `@/lib/utils` for className merging
-- **Types** — Shared types in `src/types/index.ts`. `STORY_STATUSES` (board-visible) and `ALL_STORY_STATUSES` (includes ICEBOX).
-- **API routes** — Use `requireProjectAccess()` from `@/lib/api-auth` for auth
-- **Schema changes** — Run `npx prisma db push` (no migrations, using db push)
-- **File uploads** — Stored in `public/uploads/`, max 10MB per file. SVG uploads are blocked (XSS risk).
-- **Rate limiting** — Auth routes: 10 req/min (excluding `/api/auth/session`), API routes: 60 req/min. Upstash Redis when `UPSTASH_REDIS_REST_URL` is set, in-memory fallback otherwise. Fail-open on Redis errors.
+- Using Prisma v6 (not v7) — import from `@prisma/client`
+- Seed: prisma/seed.ts
+- Demo user: demo@codepylot.dev with "Demo Workspace" org
 
 ## Security Conventions
 
-All API routes follow these hardened patterns established during production QA:
+- NEVER hardcode API keys, secrets, or credentials in source files
+- NEVER commit .env files or any file containing secrets
+- Always validate user input at system boundaries (Zod schemas in src/lib/validations/)
+- Always sanitize file paths to prevent directory traversal
+- Always use `requireProjectAccess()` for API route auth
+- Always use `parseJsonBody()` for request body parsing (size limits)
+- Always use `sanitizeError()` / `stripSecrets()` for error responses
+- Always use `isValidTransition()` for story status changes
+- Always use `isPublicUrl()` for webhook/deploy URL validation (SSRF prevention)
+- Always encrypt sensitive fields with `encrypt()` from src/lib/encryption.ts
+- Never use `safeDecrypt()` to silently accept plaintext — it returns null + warns
+- AI prompts must separate system instructions from user input (systemPrompt/userMessage)
+- Rate limits: apiRateLimit (60/min), aiRateLimit (10/min), authRateLimit (10/min)
+- Review enforcement: agent stories require `reviewedAt` before REVIEW→DONE transition (server-side 422)
 
-- **Request body size limits** — Every route accepting JSON must use `parseJsonBody(req, maxBytes)` from `@/lib/api-error`. Never use `await req.json()` directly. Typical limits: 1KB for simple actions, 4KB for forms, 64KB for AI, 512KB for stories, 1MB for bulk.
-- **Secret comparison** — Always use `crypto.timingSafeEqual()` for comparing secrets (cron tokens, webhook secrets, API keys). Never use `===` for secret strings.
-- **Error sanitization** — Use `sanitizeError(err, fallback)` from `@/lib/api-error` in catch blocks. Never expose raw `err.message` to clients — it may contain tokens or internal paths. `stripSecrets()` auto-redacts GitHub tokens, Bearer tokens, and URL credentials from logs.
-- **Shell commands** — Always use `execFileSync`/`execFile` with array arguments. Never use `execSync` with string interpolation (shell injection risk).
-- **Story-project ownership** — Sub-resource routes (comments, attachments, logs, dependencies, etc.) must verify `{ id: storyId, projectId }` before proceeding. Prevents cross-project IDOR.
-- **Story state machine** — Use `isValidTransition(from, to)` from `@/lib/story-state-machine` when updating story status via API. Returns 422 on invalid transitions.
-- **RBAC privilege escalation** — Only users with OWNER role can assign the OWNER role to others. Check caller's role before allowing role changes.
-- **2FA enforcement** — Middleware blocks both page routes AND API routes when `requires2FA` is true (except `/api/auth/*` and `/api/account/2fa/*`).
-- **HTML escaping in emails** — Use `esc()` from `@/lib/email-templates` for all user-controlled content in email HTML. Prevents stored XSS via email injection.
-- **CSV export** — Use `csvEscape()` which prefixes values starting with `=+\-@` with `'` to prevent formula injection in spreadsheets.
-- **Webhook secrets** — Never return webhook `secret` field in API responses. Use Prisma `select` to exclude it.
-- **Preview/agent fields** — `previewPort` and `previewPid` are excluded from `updateStorySchema`. Only the internal preview-manager sets these.
-- **SSRF protection** — Validate user-controlled URLs with `isPublicUrl()` before making server-side requests (deploy webhooks, etc.).
-- **Branch name validation** — `branchName` is validated with `/^[a-zA-Z0-9\/_.\-]+$/` regex in Zod schema to prevent injection.
-- **File upload types** — SVG uploads are blocked (can contain embedded JavaScript). Allowed: images (PNG, JPG, GIF, WebP), PDF, and text files.
+## Review Enforcement (Trust Gate)
 
-## MCP Server
+Agent-completed stories cannot be approved without code review:
 
-Located at `packages/mcp-server/`. Build and configure:
+1. Story moves to REVIEW after agent completes
+2. User must view the Diff tab (triggers `POST /confirm-review` → sets `reviewedAt`/`reviewedBy`)
+3. Approve/Deploy buttons disabled until `reviewedAt` is set (frontend + server-side)
+4. PATCH to status=DONE returns 422 if `reviewedAt` is null for agent stories
+5. `reviewedAt`/`reviewedBy` are cleared when story moves away from REVIEW
+6. Non-agent stories (manual) are not gated
+
+## Agent System
+
+### Architecture (3 files)
+
+- `agent-trigger.ts` (116 lines) — orchestrator: `processNextStory()`, `triggerClaudeAgent()`
+- `agent-queue.ts` (150 lines) — queue: `resolveMaxAgents()`, `isQueueBlocked()`, `claimAgentSlot()`, `findNextStory()`
+- `agent-executor.ts` (324 lines) — execution: `spawnAgent()`, `ensureBranch()`, `getClaudeBin()`
+
+### Agent Learning
+
+- Rejection feedback stored as Activity records and comments
+- Last 5 rejection patterns for the project included in agent prompt context
+- Pattern: "PAST REVIEW PATTERNS — The user has previously requested these changes..."
+
+### Diff Risk Detection
+
+The diff viewer scans added lines for 7 risk patterns:
+- Hardcoded secrets (api_key, password, token)
+- Code execution (eval, Function constructor, child_process)
+- XSS (dangerouslySetInnerHTML, innerHTML)
+- Raw SQL ($queryRawUnsafe)
+- Debug logging (console.log/debug)
+- Environment variable references
+- Unresolved TODOs (TODO, FIXME, HACK, XXX)
+
+## Webhook System
+
+- Dispatch: src/lib/webhooks.ts → creates delivery records, attempts immediately
+- Retry: exponential backoff (30s × 4^attempt, capped at 2h), max 5 attempts
+- Dead Letter Queue: exhausted deliveries get status `DEAD_LETTER` (not `FAILED`)
+- `FAILED` reserved for permanent failures (SSRF block, webhook deleted)
+- Activity log on DLQ entry (WEBHOOK_DEAD_LETTER type)
+- Replay: `POST .../deliveries/[deliveryId]/retry` resets to PENDING
+- List: `GET .../deliveries?status=DEAD_LETTER`
+- SSRF: `isPublicUrl()` re-validated at delivery time (DNS rebinding prevention)
+
+## Public Board Sharing
+
+- Toggle `isPublic` in project settings
+- Public page: `/board/[slug]` (SSR, no auth required)
+- Public API: `GET /api/public/projects/[slug]`
+- Safe field whitelist: title, shortId, status, type, priority, storyPoints, labels
+- NOT exposed: descriptions, comments, agent logs, assignee, API keys, org details
+- Share button + signup CTA in public board footer
+- Private projects return 404 (no information leak)
+
+## Cron Jobs (vercel.json)
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| `/api/cron/agent-cleanup` | Every 15 min | Mark RUNNING agents as FAILED after 30min timeout |
+| `/api/cron/webhook-retry` | Every 5 min | Retry PENDING webhook deliveries |
+| `/api/cron/recurring` | Daily 6am | Create recurring stories |
+| `/api/cron/digest` | Daily 8am | Send daily digest emails |
+
+## Concurrency: 1 MESSAGE = ALL RELATED OPERATIONS
+
+- All operations MUST be concurrent/parallel in a single message
+- Use Claude Code's Task tool for spawning agents, not just MCP
+- ALWAYS batch ALL file reads/writes/edits in ONE message
+- ALWAYS batch ALL Bash commands in ONE message
+- ALWAYS spawn ALL agents in ONE message for parallel execution
+
+## Swarm Orchestration
+
+- MUST initialize the swarm using CLI tools when starting complex tasks
+- MUST spawn concurrent agents using Claude Code's Task tool
+- Never use CLI tools alone for execution — Task tool agents do the actual work
+- ALWAYS use hierarchical topology for coding swarms
+- Keep maxAgents at 5 for tight coordination
+- Use specialized strategy for clear role boundaries
 
 ```bash
-cd packages/mcp-server
-npm install && npm run build
+npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 5 --strategy specialized
 ```
 
-Environment for MCP server:
-```
-CODEPYLOT_API_URL=http://localhost:3000
-CODEPYLOT_API_KEY=<project-api-key>
-CODEPYLOT_PROJECT_ID=<project-id>
-```
+## Swarm Execution Rules
 
-The MCP server is automatically configured when the agent trigger system spawns Claude Code.
+- ALWAYS use `run_in_background: true` for all agent Task calls
+- ALWAYS put ALL agent Task calls in ONE message for parallel execution
+- After spawning, STOP — do NOT add more tool calls or check status
+- Never poll TaskOutput or check swarm status — trust agents to return
+- When agent results arrive, review ALL results before proceeding
 
-## CLI Tool
+## Ruflo Agent Team
 
-Located at `packages/cli/`. Build and install:
+When using Ruflo for this repository, use the following team:
+
+- Product Manager: coordinator
+    - Owns backlog refinement, acceptance criteria, scope control, and sprint planning
+    - Must verify that new work matches the product direction in this CLAUDE.md
+
+- Architect: architect
+    - Owns system design, file placement, App Router boundaries, API design, and reuse of existing patterns
+
+- Coder: coder
+    - Owns implementation
+    - Must follow all conventions in this CLAUDE.md exactly
+    - Must not bypass parseJsonBody, requireProjectAccess, isValidTransition, sanitizeError, or validation schemas
+
+- Tester: tester
+    - Owns Vitest and Playwright coverage
+    - Must validate data-testid conventions and avoid regressions
+
+- Security Tester: security-scanner
+    - Owns auth, API, upload, webhook, SSRF, IDOR, secret handling, and shell-safety review
+    - Must specifically verify the Security Conventions section before marking work ready
+
+Process:
+1. Product Manager refines request into acceptance criteria
+2. Architect proposes implementation plan
+3. Coder implements
+4. Tester verifies behavior and regression coverage
+5. Security Tester performs security review
+6. Only then mark the task complete
+
+## Quick Setup
 
 ```bash
-cd packages/cli
-npm install && npm run build
+claude mcp add claude-flow -- npx -y @claude-flow/cli@latest
+npx @claude-flow/cli@latest daemon start
+npx @claude-flow/cli@latest doctor --fix
 ```
 
-Environment for CLI:
-```
-CODEPYLOT_API_URL=http://localhost:3000
-CODEPYLOT_API_KEY=<project-api-key>
-CODEPYLOT_PROJECT_ID=<project-id>
-```
+## Support
 
-Commands: `codepylot stories`, `codepylot story <id>`, `codepylot create "title"`, `codepylot move <id> <status>`, `codepylot note <id> "msg"`, `codepylot complete <id>`
-
-## CI/CD & Deployment
-
-### GitHub Actions (`.github/workflows/ci.yml`)
-
-**Triggers:** Push to `main` + PRs to `main`
-
-- **Job 1: `lint-and-build`** — Runs on all triggers: `npm ci` → `prisma generate` → `npm run lint` → `npm run build`
-- **Job 2: `deploy`** — Push to `main` only (needs job 1): builds Docker image → pushes to GitHub Container Registry (GHCR) → SSHs into VPS → pulls new image → restarts
-
-### VPS Production Deployment (`docker-compose.prod.yml`)
-
-- Uses pre-built image from GHCR (no building on VPS)
-- CodePylot on port 3001 (behind Caddy reverse proxy)
-- PostgreSQL with env-based password
-- Automatic daily database backups
-
-**Required GitHub repo secrets:** `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
-
-### Git Push Route
-
-The git-push API route (`/api/projects/[projectId]/git-push`) performs `git pull --rebase` before pushing to handle diverged remotes gracefully. Supports token-authenticated HTTPS push (via GitHub OAuth token) with automatic URL cleanup.
+- Documentation: https://github.com/ruvnet/claude-flow
+- Issues: https://github.com/ruvnet/claude-flow/issues

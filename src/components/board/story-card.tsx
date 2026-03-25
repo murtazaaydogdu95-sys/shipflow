@@ -188,6 +188,10 @@ export const StoryCard = React.memo(function StoryCard({ story, onClick, onDelet
     prev.story.shortId === next.story.shortId &&
     prev.story.assignee?.id === next.story.assignee?.id &&
     (prev.story.labels?.length ?? 0) === (next.story.labels?.length ?? 0) &&
+    (prev.story.acceptanceCriteria?.length ?? 0) === (next.story.acceptanceCriteria?.length ?? 0) &&
+    (prev.story.acceptanceCriteria?.filter(ac => ac.completed).length ?? 0) === (next.story.acceptanceCriteria?.filter(ac => ac.completed).length ?? 0) &&
+    (prev.story.children?.length ?? 0) === (next.story.children?.length ?? 0) &&
+    (prev.story.blockedByDeps?.length ?? 0) === (next.story.blockedByDeps?.length ?? 0) &&
     prev.isDragging === next.isDragging &&
     prev.isSelected === next.isSelected &&
     prev.isFocused === next.isFocused &&

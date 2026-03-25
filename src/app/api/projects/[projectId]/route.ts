@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse, forbiddenResponse } from "@/lib/api-auth";
 import { updateProjectSchema } from "@/lib/validations/project";
@@ -29,6 +30,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       aiProvider: true,
       aiApiKey: true,
       maxConcurrentAgents: true,
+      wipLimits: true,
       deployProvider: true,
       deployProjectId: true,
       apiKeyPrefix: true,
@@ -65,10 +67,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
     data.aiApiKey = encrypt(data.aiApiKey);
   }
 
+  // Cast wipLimits to Prisma-compatible JSON type (null → Prisma.JsonNull)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prismaData: any = { ...data };
+  if (data.wipLimits !== undefined) {
+    prismaData.wipLimits = data.wipLimits === null
+      ? Prisma.JsonNull
+      : (data.wipLimits as Record<string, unknown>);
+  }
+
   try {
     const project = await prisma.project.update({
       where: { id: projectId },
-      data,
+      data: prismaData,
       select: { name: true, orgId: true },
     });
 

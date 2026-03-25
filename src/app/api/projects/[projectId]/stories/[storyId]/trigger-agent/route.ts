@@ -21,10 +21,13 @@ export async function POST(
   const feedback = body?.feedback as string | undefined;
 
   try {
-    await triggerClaudeAgent({ storyId, projectId, force: true, feedback });
+    const result = await triggerClaudeAgent({ storyId, projectId, force: true, feedback });
+    if (!result.triggered) {
+      return NextResponse.json({ triggered: false, error: result.reason }, { status: 422 });
+    }
     return NextResponse.json({ triggered: true, message: "Agent triggered successfully" });
   } catch (error) {
     sanitizeError(error, "Agent trigger failed");
-    return NextResponse.json({ triggered: false, message: "Agent trigger failed" }, { status: 500 });
+    return NextResponse.json({ triggered: false, error: "Agent trigger failed" }, { status: 500 });
   }
 }

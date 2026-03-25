@@ -28,8 +28,11 @@ export default function SettingsPage() {
   const projectId = params.projectId as string;
   const router = useRouter();
 
+  type WipLimitsState = Record<string, number | null>;
+
   const [project, setProject] = useState<{
     name: string;
+    slug: string;
     description: string;
     techStack: string;
     githubRepo: string;
@@ -46,6 +49,7 @@ export default function SettingsPage() {
     deployProvider: string;
     deployToken: string;
     deployProjectId: string;
+    wipLimits: WipLimitsState;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
@@ -67,6 +71,7 @@ export default function SettingsPage() {
       .then((p) =>
         setProject({
           name: p.name || "",
+          slug: p.slug || "",
           description: p.description || "",
           techStack: p.techStack || "",
           githubRepo: p.githubRepo || "",
@@ -83,6 +88,7 @@ export default function SettingsPage() {
           deployProvider: p.deployProvider || "",
           deployToken: p.deployToken || "",
           deployProjectId: p.deployProjectId || "",
+          wipLimits: (p.wipLimits && typeof p.wipLimits === "object" ? p.wipLimits : {}) as WipLimitsState,
         })
       );
   }, [projectId]);
@@ -109,6 +115,11 @@ export default function SettingsPage() {
           deployProvider: project.deployProvider || null,
           deployToken: project.deployToken || null,
           deployProjectId: project.deployProjectId || null,
+          wipLimits: Object.keys(project.wipLimits).length > 0
+            ? Object.fromEntries(
+                Object.entries(project.wipLimits).filter(([, v]) => v != null)
+              )
+            : null,
         }),
       });
       if (!res.ok) {
@@ -594,17 +605,17 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Public Roadmap</CardTitle>
+          <CardTitle>Public Board</CardTitle>
           <CardDescription>
-            Make stories from this project visible on the public roadmap
+            Share a read-only view of your board with anyone
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <Label>Enable public roadmap</Label>
+              <Label>Enable public board</Label>
               <p className="text-sm text-muted-foreground">
-                Stories will be visible at /roadmap (title and status only)
+                A read-only Kanban board will be visible to anyone with the link
               </p>
             </div>
             <Switch
@@ -612,8 +623,82 @@ export default function SettingsPage() {
               onCheckedChange={(checked) =>
                 setProject({ ...project, isPublic: checked })
               }
+              data-testid="settings-public-toggle"
             />
           </div>
+          {project.isPublic && project.slug && (
+            <div className="rounded-lg border bg-muted/50 p-3 space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Shareable link</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/board/${project.slug}`}
+                  className="font-mono text-sm"
+                  data-testid="settings-public-url"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/board/${project.slug}`);
+                    toast.success("Public board link copied");
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Only titles, status, type, priority, and labels are visible. Descriptions, comments, and internal details are hidden.
+              </p>
+            </div>
+          )}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Changes
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>WIP Limits</CardTitle>
+          <CardDescription>
+            Limit how many stories can be in each column at once. Leave empty for no limit.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {[
+            { key: "BACKLOG", label: "Backlog" },
+            { key: "TODO", label: "To Do" },
+            { key: "IN_PROGRESS", label: "In Progress" },
+            { key: "REVIEW", label: "Review" },
+            { key: "DONE", label: "Done" },
+          ].map(({ key, label }) => (
+            <div key={key} className="flex items-center gap-4">
+              <Label className="w-28 shrink-0">{label}</Label>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                placeholder="No limit"
+                value={project.wipLimits[key] ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProject({
+                    ...project,
+                    wipLimits: {
+                      ...project.wipLimits,
+                      [key]: val === "" ? null : Math.max(1, Math.min(100, parseInt(val, 10) || 1)),
+                    },
+                  });
+                }}
+                className="w-28"
+              />
+            </div>
+          ))}
+          <p className="text-sm text-muted-foreground">
+            WIP limits help your team focus by preventing too many stories from piling up in a single column. Agents bypass WIP limits when moving stories.
+          </p>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Changes

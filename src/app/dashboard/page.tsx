@@ -35,7 +35,7 @@ export default async function DashboardPage() {
       <Header />
       <div className="flex flex-1">
         <div className="flex-1 p-6 md:p-8">
-          <ProjectsList projects={projects} userId={session.user.id} />
+          <ProjectsList projects={projects} />
         </div>
       </div>
     </div>

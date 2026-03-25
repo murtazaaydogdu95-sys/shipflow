@@ -2,13 +2,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createHmac, timingSafeEqual } from "crypto";
 import { isValidTransition } from "@/lib/story-state-machine";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   const { projectId } = await params;
+
+  // Enforce body size limit (1MB) to prevent memory exhaustion
+  const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+  if (contentLength > 1_048_576) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
   const body = await req.text();
+  if (body.length > 1_048_576) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project?.webhookSecret) {
@@ -133,7 +143,7 @@ export async function POST(
                     body: JSON.stringify({ body: commentBody }),
                     signal: AbortSignal.timeout(10000),
                   }).catch((err) => {
-                    console.error("[github-webhook] Failed to post PR comment:", err.message);
+                    console.error("[github-webhook] Failed to post PR comment:", sanitizeError(err, "PR comment failed"));
                   });
                 }
               }

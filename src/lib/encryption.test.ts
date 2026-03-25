@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { encrypt, decrypt, safeDecrypt } from "./encryption";
 
 describe("encryption", () => {
@@ -92,8 +92,19 @@ describe("encryption", () => {
       expect(safeDecrypt(encrypted)).toBe("my-secret");
     });
 
-    it("returns plain-text as passthrough when decryption fails", () => {
-      expect(safeDecrypt("plain-text-value")).toBe("plain-text-value");
+    it("returns null for plaintext values instead of passing them through", () => {
+      expect(safeDecrypt("plain-text-value")).toBeNull();
+    });
+
+    it("returns null for short non-encrypted strings", () => {
+      expect(safeDecrypt("sk-abc123")).toBeNull();
+    });
+
+    it("returns null for tampered ciphertext", () => {
+      const encrypted = encrypt("my-secret");
+      const buf = Buffer.from(encrypted, "base64");
+      buf[Math.floor(buf.length / 2)] ^= 0xff;
+      expect(safeDecrypt(buf.toString("base64"))).toBeNull();
     });
   });
 

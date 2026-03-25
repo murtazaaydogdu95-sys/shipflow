@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { timingSafeEqual } from "crypto";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function POST(req: Request) {
   // Verify: Bearer token OR Vercel cron header (only trust on actual Vercel deployments)
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
 
       created++;
     } catch (err) {
-      console.error(`[recurring] Failed to create story for recurring ${recurring.id}:`, err);
+      console.error(`[recurring] Failed to create story for recurring ${recurring.id}:`, sanitizeError(err, "Recurring story creation failed"));
     }
   }
 

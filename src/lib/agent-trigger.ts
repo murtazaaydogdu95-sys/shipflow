@@ -1,210 +1,15 @@
-import { spawn, execSync, execFileSync } from "child_process";
-import { writeFileSync, openSync, appendFileSync } from "fs";
-import { homedir } from "os";
-import path from "path";
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/paddle";
+import { isQueueBlocked, findNextStory } from "@/lib/agent-queue";
+import { spawnAgent, AGENT_TIMEOUT_MS } from "@/lib/agent-executor";
 
-export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
-
-const PRIORITY_ORDER: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-};
-
-/**
- * Lazily resolve the claude binary path. Cached after first successful resolution.
- */
-let _claudeBin: string | null = null;
-function getClaudeBin(): string {
-  if (_claudeBin) return _claudeBin;
-
-  const home = homedir();
-  const candidates = [
-    path.join(home, ".local", "bin", "claude"),
-    path.join(home, ".claude", "bin", "claude"),
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-  ];
-
-  // Check known paths first
-  for (const p of candidates) {
-    try {
-      execSync(`test -x "${p}"`, { stdio: "ignore" });
-      _claudeBin = p;
-      console.log(`[agent-trigger] claude binary found at: ${p}`);
-      return p;
-    } catch {
-      // try next
-    }
-  }
-
-  // Fall back to which
-  try {
-    _claudeBin = execSync("which claude", { encoding: "utf-8" }).trim();
-    console.log(`[agent-trigger] claude binary resolved via which: ${_claudeBin}`);
-    return _claudeBin;
-  } catch {
-    // last resort
-  }
-
-  console.warn("[agent-trigger] claude binary not found, using bare 'claude'");
-  _claudeBin = "claude";
-  return _claudeBin;
-}
+// Re-export for backward compatibility (used by agent-cleanup cron)
+export { AGENT_TIMEOUT_MS };
 
 interface TriggerOptions {
   storyId: string;
   projectId: string;
   force?: boolean;
   feedback?: string;
-}
-
-/**
- * Resolve the plan-level max concurrent agents for a project's org.
- */
-async function resolveMaxAgents(projectId: string): Promise<number> {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { orgId: true, maxConcurrentAgents: true },
-  });
-
-  let planMax: number = PLAN_LIMITS.FREE.maxConcurrentAgents;
-  if (project?.orgId) {
-    const org = await prisma.organization.findUnique({
-      where: { id: project.orgId },
-      select: { plan: true },
-    });
-    const plan = (org?.plan ?? "FREE") as keyof typeof PLAN_LIMITS;
-    planMax = PLAN_LIMITS[plan]?.maxConcurrentAgents ?? PLAN_LIMITS.FREE.maxConcurrentAgents;
-  }
-
-  // Use the lower of project setting and plan limit
-  const projectMax = project?.maxConcurrentAgents ?? 1;
-  return Math.min(projectMax, planMax);
-}
-
-/**
- * Check if agent slots are available for this project.
- * Counts active agents (RUNNING + QUEUED) and compares to plan-aware maxConcurrentAgents.
- * REVIEW stories no longer block the queue.
- */
-async function isQueueBlocked(projectId: string): Promise<boolean> {
-  const maxAgents = await resolveMaxAgents(projectId);
-
-  const activeCount = await prisma.story.count({
-    where: {
-      projectId,
-      agentStatus: { in: ["RUNNING", "QUEUED"] },
-    },
-  });
-  return activeCount >= maxAgents;
-}
-
-/**
- * Atomically claim an agent slot by setting agentStatus to QUEUED only if
- * the current active agent count is below maxConcurrentAgents.
- * Returns true if the slot was successfully claimed, false otherwise.
- * This prevents the race condition where two concurrent requests both pass
- * isQueueBlocked() and exceed the limit.
- */
-async function claimAgentSlot(storyId: string, projectId: string): Promise<boolean> {
-  const maxAgents = await resolveMaxAgents(projectId);
-
-  // Use a serializable transaction to atomically check count + claim slot
-  try {
-    await prisma.$transaction(async (tx) => {
-      const activeCount = await tx.story.count({
-        where: {
-          projectId,
-          agentStatus: { in: ["RUNNING", "QUEUED"] },
-        },
-      });
-
-      if (activeCount >= maxAgents) {
-        throw new Error("SLOT_FULL");
-      }
-
-      await tx.story.update({
-        where: { id: storyId },
-        data: {
-          agentStatus: "QUEUED",
-          assignedToAgent: true,
-          agentTriggeredAt: new Date(),
-        },
-      });
-    }, { isolationLevel: "Serializable" });
-
-    return true;
-  } catch (err) {
-    if (err instanceof Error && err.message === "SLOT_FULL") {
-      return false;
-    }
-    // Serialization failure (concurrent transaction) — treat as slot full
-    console.warn(`[agent-trigger] claimAgentSlot: transaction conflict for ${storyId}, treating as slot full`);
-    return false;
-  }
-}
-
-/**
- * Find the next eligible story to process, ordered by priority.
- * All priorities are eligible. Order: CRITICAL → HIGH → MEDIUM → LOW, then by creation date.
- */
-async function findNextStory(projectId: string) {
-  // Use Prisma raw ordering by priority via a CASE expression is not supported,
-  // so we use orderBy with multiple fields and filter blocked stories in memory.
-  // Optimization: fetch candidates ordered by priority then createdAt, with blockedByDeps included.
-  // We fetch a small batch and find the first unblocked one.
-  const batchSize = 20;
-  let skip = 0;
-
-  while (true) {
-    const stories = await prisma.story.findMany({
-      where: {
-        projectId,
-        status: { in: ["BACKLOG", "TODO"] },
-        agentStatus: null, // not already queued/running/completed
-      },
-      include: {
-        acceptanceCriteria: { orderBy: { position: "asc" } },
-        blockedByDeps: {
-          include: { blocker: { select: { status: true } } },
-        },
-      },
-      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
-      take: batchSize,
-      skip,
-    });
-
-    if (stories.length === 0) {
-      if (skip > 0) {
-        console.log(`[agent-trigger] findNextStory: all eligible stories are blocked`);
-      }
-      return null;
-    }
-
-    // Sort by priority mapping (DB sorts alphabetically, we need CRITICAL > HIGH > MEDIUM > LOW)
-    stories.sort(
-      (a, b) => (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3)
-    );
-
-    // Find first unblocked story
-    for (const s of stories) {
-      if (!s.blockedByDeps || s.blockedByDeps.length === 0) return s;
-      if (s.blockedByDeps.every((dep) => dep.blocker.status === "DONE")) return s;
-    }
-
-    // All in this batch were blocked, try next batch
-    skip += batchSize;
-
-    // Safety limit to avoid infinite loops
-    if (skip > 500) {
-      console.log(`[agent-trigger] findNextStory: checked 500+ stories, all blocked`);
-      return null;
-    }
-  }
 }
 
 /**
@@ -264,7 +69,11 @@ export async function processNextStory(projectId: string) {
     });
   }
 
-  await spawnAgent({ storyId: story.id, projectId });
+  await spawnAgent({
+    storyId: story.id,
+    projectId,
+    onComplete: (pid) => processNextStory(pid).catch(console.error),
+  });
 
   // Check if more agent slots are available and fill them
   if (!(await isQueueBlocked(projectId))) {
@@ -276,7 +85,11 @@ export async function processNextStory(projectId: string) {
 /**
  * Trigger agent for a specific story. Used for manual triggers and re-triggers with feedback.
  */
-export async function triggerClaudeAgent({ storyId, projectId, force, feedback }: TriggerOptions) {
+export type TriggerResult =
+  | { triggered: true }
+  | { triggered: false; reason: string };
+
+export async function triggerClaudeAgent({ storyId, projectId, force, feedback }: TriggerOptions): Promise<TriggerResult> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
@@ -287,256 +100,24 @@ export async function triggerClaudeAgent({ storyId, projectId, force, feedback }
     },
   });
 
-  if (!project) return;
-  if (!force && !project.agentAutoAssign) return;
-  if (!project.apiKey || !project.agentWorkingDir) return;
+  if (!project) return { triggered: false, reason: "Project not found" };
+  if (!force && !project.agentAutoAssign) return { triggered: false, reason: "Agent auto-assign is disabled. Enable it in Project Settings." };
+  if (!project.apiKey) return { triggered: false, reason: "No API key configured. Generate one in Project Settings → Claude Code Integration." };
+  if (!project.agentWorkingDir) return { triggered: false, reason: "No working directory configured. Set it in Project Settings → Agent Automation." };
 
   const story = await prisma.story.findUnique({
     where: { id: storyId },
   });
 
-  if (!story) return;
-  if (story.agentStatus === "RUNNING") return;
+  if (!story) return { triggered: false, reason: "Story not found" };
+  if (story.agentStatus === "RUNNING") return { triggered: false, reason: "Agent is already running on this story" };
 
-  await spawnAgent({ storyId, projectId, feedback });
-}
-
-const BRANCH_PREFIX: Record<string, string> = {
-  feature: "feat",
-  bug: "bug",
-  chore: "chore",
-  refactor: "refactor",
-  docs: "docs",
-  test: "test",
-};
-
-/**
- * Create or checkout a branch for the story.
- * Uses the story type to determine the branch prefix.
- * Returns the branch name.
- */
-async function ensureBranch(story: { id: string; shortId: string; title: string; type: string; branchName: string | null }, cwd: string): Promise<string> {
-  const opts = { cwd, encoding: "utf-8" as const, timeout: 15000 };
-
-  if (story.branchName) {
-    // Re-trigger: checkout existing branch
-    try {
-      execFileSync("git", ["checkout", story.branchName], opts);
-    } catch {
-      // Branch might already be checked out
-    }
-    console.log(`[agent-trigger] checked out existing branch: ${story.branchName}`);
-    return story.branchName;
-  }
-
-  // Create new branch from main
-  const slug = story.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-  const prefix = BRANCH_PREFIX[story.type] || "feat";
-  const branchName = `${prefix}/${story.shortId}-${slug}`;
-
-  try {
-    execFileSync("git", ["checkout", "main"], opts);
-    execFileSync("git", ["pull", "origin", "main"], opts);
-  } catch {
-    // If pull fails (no remote, etc.), just stay on main
-    console.warn("[agent-trigger] git pull failed, continuing on current main");
-  }
-
-  execFileSync("git", ["checkout", "-b", branchName], opts);
-
-  // Store branch name on story
-  await prisma.story.update({
-    where: { id: story.id },
-    data: { branchName },
+  await spawnAgent({
+    storyId,
+    projectId,
+    feedback,
+    onComplete: (pid) => processNextStory(pid).catch(console.error),
   });
 
-  console.log(`[agent-trigger] created branch: ${branchName}`);
-  return branchName;
-}
-
-/**
- * Core function: spawn a detached Claude process for a story.
- */
-async function spawnAgent({ storyId, projectId, feedback }: { storyId: string; projectId: string; feedback?: string }) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { agentWorkingDir: true, apiKey: true },
-  });
-
-  if (!project?.apiKey || !project.agentWorkingDir) return;
-
-  const story = await prisma.story.findUnique({
-    where: { id: storyId },
-    include: { acceptanceCriteria: { orderBy: { position: "asc" } } },
-  });
-
-  if (!story) return;
-
-  // Atomically claim an agent slot before doing any work
-  const claimed = await claimAgentSlot(storyId, projectId);
-  if (!claimed) {
-    console.log(`[agent-trigger] spawnAgent: no agent slot available for ${story.shortId}`);
-    return;
-  }
-
-  // Create or checkout feature branch
-  const branchName = await ensureBranch(story, project.agentWorkingDir);
-
-  // Build MCP config
-  const configPath = `/tmp/codepylot-mcp-${storyId}.json`;
-  const mcpConfig = {
-    mcpServers: {
-      codepylot: {
-        command: "node",
-        args: [path.resolve(process.cwd(), "packages/mcp-server/dist/index.js")],
-        env: {
-          CODEPYLOT_API_URL: process.env.NEXTAUTH_URL || "http://localhost:3000",
-          CODEPYLOT_API_KEY: project.apiKey,
-          CODEPYLOT_PROJECT_ID: projectId,
-        },
-      },
-    },
-  };
-
-  writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2));
-
-  // Build prompt
-  const acList = story.acceptanceCriteria
-    .map((ac) => `  - Given ${ac.given}, When ${ac.when}, Then ${ac.then}`)
-    .join("\n");
-
-  const promptParts = [
-    `You are working on story ${story.shortId}: "${story.title}"`,
-    `\nStory ID (use this for all MCP tool calls): ${story.id}`,
-    story.description ? `\nDescription: ${story.description}` : "",
-    story.userStory ? `\nUser Story: ${story.userStory}` : "",
-    acList ? `\nAcceptance Criteria:\n${acList}` : "",
-    `\nPriority: ${story.priority}`,
-  ];
-
-  if (feedback) {
-    promptParts.push(
-      `\n⚠️ REVIEW FEEDBACK — The user reviewed your previous work and requested changes:`,
-      `"${feedback}"`,
-      `\nFix the issues described above. Do not start from scratch — only address the feedback.`,
-    );
-  }
-
-  promptParts.push(
-    `\nInstructions:`,
-    `1. First call update_story_status with storyId "${story.id}" to move the story to IN_PROGRESS`,
-    `2. ${feedback ? "Fix the issues described in the review feedback" : "Implement the feature/fix described above"}`,
-    `3. When done, call complete_story with storyId "${story.id}", a summary and commit hash — this moves the story to REVIEW for the user to approve`,
-    `4. Do NOT move the story to DONE — the user will review and approve it`,
-    `5. If you get stuck, call add_note with progress details`,
-  );
-
-  const prompt = promptParts.join("\n");
-
-  // Resolve claude binary lazily
-  const claudeBin = getClaudeBin();
-
-  // Build PATH that includes common install locations
-  const home = homedir();
-  const extraPath = [
-    path.join(home, ".local", "bin"),
-    path.join(home, ".claude", "bin"),
-    "/usr/local/bin",
-    "/opt/homebrew/bin",
-  ].join(":");
-  const fullPath = `${process.env.PATH || ""}:${extraPath}`;
-
-  // Spawn detached claude process with output logging
-  const logPath = `/tmp/codepylot-agent-${storyId}.log`;
-  const logFd = openSync(logPath, "w");
-
-  console.log(`[agent-trigger] spawning: ${claudeBin} for ${story.shortId} in ${project.agentWorkingDir}`);
-
-  const child = spawn(claudeBin, ["--print", "--dangerously-skip-permissions", "--mcp-config", configPath, "-p", prompt], {
-    detached: true,
-    stdio: ["ignore", logFd, logFd],
-    cwd: project.agentWorkingDir,
-    env: { ...process.env, PATH: fullPath },
-  });
-
-  child.unref();
-
-  // On exit: if success + REVIEW, auto-start preview; on failure mark FAILED
-  child.on("exit", async (code) => {
-    console.log(`[agent-trigger] agent exited for ${story.shortId} with code ${code}`);
-    if (code !== 0) {
-      try {
-        await prisma.story.update({
-          where: { id: storyId },
-          data: { agentStatus: "FAILED" },
-        });
-      } catch (err) {
-        console.error(`[agent-trigger] failed to update status for ${storyId}:`, err);
-      }
-    } else {
-      // Check if story moved to REVIEW (agent called complete_story)
-      try {
-        const latest = await prisma.story.findUnique({ where: { id: storyId } });
-        if (latest && latest.status === "REVIEW" && latest.agentStatus === "COMPLETED") {
-          const { startPreview } = await import("@/lib/preview-manager");
-          await startPreview(storyId, projectId);
-
-          // Auto-trigger AI code review
-          try {
-            const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-            const proj = await prisma.project.findUnique({
-              where: { id: projectId },
-              select: { apiKey: true },
-            });
-            if (proj?.apiKey) {
-              fetch(`${baseUrl}/api/projects/${projectId}/stories/${storyId}/review`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${proj.apiKey}` },
-              }).catch(console.error);
-            }
-          } catch (reviewErr) {
-            console.error(`[agent-trigger] auto-review failed for ${storyId}:`, reviewErr);
-          }
-        }
-      } catch (err) {
-        console.error(`[agent-trigger] failed to start preview for ${storyId}:`, err);
-      }
-    }
-    // Whether success or failure, check if there's another story to process
-    processNextStory(projectId).catch(console.error);
-  });
-
-  child.on("error", async (err) => {
-    console.error(`[agent-trigger] spawn error for ${story.shortId}:`, err.message);
-    appendFileSync(logPath, `\nSPAWN ERROR: ${err.message}\n`);
-    try {
-      await prisma.story.update({
-        where: { id: storyId },
-        data: { agentStatus: "FAILED" },
-      });
-    } catch (e) {
-      console.error(`[agent-trigger] failed to update status for ${storyId}:`, e);
-    }
-    processNextStory(projectId).catch(console.error);
-  });
-
-  // Mark as RUNNING
-  await prisma.story.update({
-    where: { id: storyId },
-    data: { agentStatus: "RUNNING" },
-  });
-
-  // Log activity
-  await prisma.activity.create({
-    data: {
-      type: "AGENT_TRIGGERED",
-      message: `Claude agent triggered for story: ${story.title} (branch: ${branchName})`,
-      projectId,
-      storyId,
-    },
-  });
+  return { triggered: true };
 }

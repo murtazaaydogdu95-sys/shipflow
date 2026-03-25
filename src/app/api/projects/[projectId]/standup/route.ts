@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
 import { safeDecrypt } from "@/lib/encryption";
+import { aiRateLimit } from "@/lib/rate-limit";
 
 export async function GET(
   req: Request,
@@ -11,6 +12,16 @@ export async function GET(
   const { projectId } = await params;
   const access = await requireProjectAccess(req, projectId);
   if (!access) return unauthorizedResponse();
+
+  // Rate limit AI requests per user/project
+  const rlKey = access.type === "session" ? access.userId : access.projectId;
+  const rl = await aiRateLimit.check(rlKey);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many AI requests. Please wait a moment before trying again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
 
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -91,7 +102,12 @@ export async function GET(
     });
   }
 
-  const prompt = `Generate a concise daily standup summary for the project "${project.name}". Write in first person as a solo developer.
+  // System prompt contains only trusted instructions
+  const systemPrompt = `Generate a concise daily standup summary. Write in first person as a solo developer.
+Format as clean markdown with sections. Keep it brief (3-5 sentences total). Respond with ONLY the markdown text, no JSON wrapping.`;
+
+  // User message contains the project data — isolated from system instructions
+  const userMessage = `Project: ${project.name}
 
 Completed yesterday:
 ${completedList}
@@ -103,12 +119,10 @@ Needs review:
 ${reviewList}
 
 Blocked:
-${blockedList}
-
-Format as clean markdown with sections. Keep it brief (3-5 sentences total). Respond with ONLY the markdown text, no JSON wrapping.`;
+${blockedList}`;
 
   try {
-    const result = await rewriteWithAI({ provider, apiKey, prompt });
+    const result = await rewriteWithAI({ provider, apiKey, systemPrompt, userMessage });
     // The result will be JSON but we want the text content
     const summary = typeof result === "string" ? result : JSON.stringify(result);
     return NextResponse.json({ summary });

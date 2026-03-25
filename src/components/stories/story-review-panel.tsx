@@ -16,20 +16,24 @@ interface StoryReviewPanelProps {
     deployUrl: string | null;
   };
   reviewLoading: boolean;
+  hasViewedDiff: boolean;
   onApprove: () => void;
   onReject: (feedback: string) => void;
   onRevert: () => void;
   onDeploy: () => Promise<void>;
+  onViewDiff: () => void;
   deploying: boolean;
 }
 
 export function StoryReviewPanel({
   story,
   reviewLoading,
+  hasViewedDiff,
   onApprove,
   onReject,
   onRevert,
   onDeploy,
+  onViewDiff,
   deploying,
 }: StoryReviewPanelProps) {
   const [rejecting, setRejecting] = useState(false);
@@ -82,12 +86,24 @@ export function StoryReviewPanel({
           )}
         </div>
       )}
+      {!hasViewedDiff && story.branchName && (
+        <Button
+          variant="outline"
+          onClick={onViewDiff}
+          className="w-full border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+          data-testid="review-view-diff-btn"
+        >
+          <GitBranch className="mr-2 h-4 w-4" />
+          Review code changes before approving
+        </Button>
+      )}
       {!rejecting ? (
         <div className="flex gap-2">
           <Button
             onClick={onApprove}
-            disabled={reviewLoading}
+            disabled={reviewLoading || (!hasViewedDiff && !!story.branchName)}
             className="flex-1 bg-green-600 hover:bg-green-700"
+            title={!hasViewedDiff && story.branchName ? "Review the diff first" : undefined}
           >
             {reviewLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -99,8 +115,8 @@ export function StoryReviewPanel({
           <Button
             variant="outline"
             onClick={onDeploy}
-            disabled={deploying || reviewLoading}
-            title="Deploy branch"
+            disabled={deploying || reviewLoading || (!hasViewedDiff && !!story.branchName)}
+            title={!hasViewedDiff && story.branchName ? "Review the diff first" : "Deploy branch"}
           >
             {deploying ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Rocket className="mr-1 h-4 w-4" />}
             Deploy

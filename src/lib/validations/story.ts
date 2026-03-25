@@ -46,7 +46,23 @@ export const rewriteStorySchema = z.object({
   techStack: z.string().optional(),
 });
 
+export const importStorySchema = z.object({
+  format: z.enum(["csv", "json"]),
+  data: z.string().min(1).max(1_048_576), // 1MB max
+});
+
+export const importStoryRowSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).optional().nullable(),
+  status: storyStatusEnum.optional().nullable(),
+  priority: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional().nullable(),
+  type: z.enum(["feature", "bug", "chore", "refactor", "docs", "test"]).optional().nullable(),
+  storyPoints: z.number().int().min(0).max(100).optional().nullable(),
+});
+
 export type CreateStoryInput = z.infer<typeof createStorySchema>;
 export type UpdateStoryInput = z.infer<typeof updateStorySchema>;
 export type MoveStoryInput = z.infer<typeof moveStorySchema>;
 export type RewriteStoryInput = z.infer<typeof rewriteStorySchema>;
+export type ImportStoryInput = z.infer<typeof importStorySchema>;
+export type ImportStoryRow = z.infer<typeof importStoryRowSchema>;

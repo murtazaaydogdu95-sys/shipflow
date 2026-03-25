@@ -1,4 +1,3 @@
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 /** Escape user-controlled strings before interpolating into HTML */
 function esc(s: string): string {

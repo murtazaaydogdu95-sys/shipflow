@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import useSWR from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ChevronLeft, ChevronRight, X, Bot, Globe, GitBranch, ScrollText } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Bot, Globe, GitBranch } from "lucide-react";
 import { DiffViewer } from "@/components/stories/diff-viewer";
 import { AIReview } from "@/components/stories/ai-review";
 import type { StoryWithRelations } from "@/types";

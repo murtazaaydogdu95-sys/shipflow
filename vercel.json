@@ -2,7 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/agent-cleanup",
-      "schedule": "0 0 * * *"
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/webhook-retry",
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/recurring",

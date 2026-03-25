@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { isPublicUrl } from "@/lib/validations/webhook";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function GET(
   req: Request,
@@ -140,7 +141,7 @@ export async function POST(
       url: deployUrl,
     });
   } catch (error) {
-    console.error("[deploy] deployment failed:", error);
+    console.error("[deploy] deployment failed:", sanitizeError(error, "Deployment failed"));
     await prisma.story.update({
       where: { id: storyId },
       data: { deployStatus: "failed" },

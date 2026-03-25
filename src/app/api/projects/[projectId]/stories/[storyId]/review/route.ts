@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
 import { safeDecrypt } from "@/lib/encryption";
+import { sanitizeError } from "@/lib/api-error";
+import { aiRateLimit } from "@/lib/rate-limit";
 
 export async function GET(
   req: Request,
@@ -37,6 +39,16 @@ export async function POST(
   const access = await requireProjectAccess(req, projectId);
   if (!access) return unauthorizedResponse();
 
+  // Rate limit AI requests per user/project
+  const rlKey = access.type === "session" ? access.userId : access.projectId;
+  const rl = await aiRateLimit.check(rlKey);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many AI requests. Please wait a moment before trying again." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
+
   const story = await prisma.story.findUnique({
     where: { id: storyId, projectId },
     select: { branchName: true, title: true },
@@ -44,6 +56,12 @@ export async function POST(
 
   if (!story?.branchName) {
     return NextResponse.json({ error: "No branch found" }, { status: 404 });
+  }
+
+  // Validate branch name to prevent git argument injection
+  const BRANCH_NAME_RE = /^[a-zA-Z0-9\/_.\-]+$/;
+  if (!BRANCH_NAME_RE.test(story.branchName)) {
+    return NextResponse.json({ error: "Invalid branch name" }, { status: 400 });
   }
 
   const project = await prisma.project.findUnique({
@@ -91,13 +109,8 @@ export async function POST(
     return NextResponse.json({ error: "No AI API key configured" }, { status: 400 });
   }
 
-  const prompt = `You are a senior code reviewer. Review the following git diff and provide feedback.
-
-Story: "${story.title}"
-
-\`\`\`diff
-${truncatedDiff}
-\`\`\`
+  // System prompt contains only trusted instructions
+  const systemPrompt = `You are a senior code reviewer. Review the provided git diff and provide feedback.
 
 Respond with ONLY valid JSON (no markdown, no code fences):
 {
@@ -120,8 +133,11 @@ Rules:
 - Be concise. Max 10 issues.
 - If code looks good, return high score with few/no issues.`;
 
+  // User message contains the diff and story context — isolated from system instructions
+  const userMessage = `Story: ${story.title}\n\n\`\`\`diff\n${truncatedDiff}\n\`\`\``;
+
   try {
-    const result = await rewriteWithAI({ provider, apiKey, prompt }) as {
+    const result = await rewriteWithAI({ provider, apiKey, systemPrompt, userMessage }) as {
       score: number;
       issues: Array<{ file: string; line: number; severity: string; message: string; suggestion: string }>;
     };
@@ -140,7 +156,7 @@ Rules:
 
     return NextResponse.json({ score, issues, reviewedAt: new Date() });
   } catch (error) {
-    console.error("[ai-review] review failed:", error);
+    console.error("[ai-review] review failed:", sanitizeError(error, "AI review failed"));
     return NextResponse.json({ error: "AI review failed" }, { status: 500 });
   }
 }

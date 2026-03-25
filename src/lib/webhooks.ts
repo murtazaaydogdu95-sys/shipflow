@@ -23,7 +23,7 @@ export async function attemptDelivery(deliveryId: string): Promise<void> {
 
   // Skip if delivery not found, webhook deleted, or already terminal
   // Allow PENDING (first attempt) and RETRYING (cron retry)
-  if (!delivery || !delivery.webhook || delivery.status === "SUCCESS" || delivery.status === "FAILED") return;
+  if (!delivery || !delivery.webhook || delivery.status === "SUCCESS" || delivery.status === "FAILED" || delivery.status === "DEAD_LETTER") return;
 
   // Re-validate URL at delivery time to prevent DNS rebinding SSRF
   if (!isPublicUrl(delivery.webhook.url)) {
@@ -66,40 +66,64 @@ export async function attemptDelivery(deliveryId: string): Promise<void> {
         },
       });
     } else {
-      const failed = newAttempts >= delivery.maxAttempts;
+      const exhausted = newAttempts >= delivery.maxAttempts;
       await prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
-          status: failed ? "FAILED" : "PENDING",
+          status: exhausted ? "DEAD_LETTER" : "PENDING",
           httpStatus: res.status,
           responseBody: responseBody.slice(0, 1024),
           errorMessage: `HTTP ${res.status}`,
           attempts: newAttempts,
           lastAttemptAt: new Date(),
-          nextRetryAt: failed ? null : new Date(Date.now() + getBackoffMs(newAttempts)),
+          nextRetryAt: exhausted ? null : new Date(Date.now() + getBackoffMs(newAttempts)),
         },
       });
+      if (exhausted) {
+        await logDeadLetter(delivery.webhook.projectId, delivery.event, delivery.webhook.url, `HTTP ${res.status}`);
+      }
     }
   } catch (err) {
     const newAttempts = delivery.attempts + 1;
-    const failed = newAttempts >= delivery.maxAttempts;
+    const exhausted = newAttempts >= delivery.maxAttempts;
     const errorMessage = err instanceof Error ? err.message : "Unknown error";
 
     try {
       await prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
-          status: failed ? "FAILED" : "PENDING",
+          status: exhausted ? "DEAD_LETTER" : "PENDING",
           errorMessage,
           attempts: newAttempts,
           lastAttemptAt: new Date(),
-          nextRetryAt: failed ? null : new Date(Date.now() + getBackoffMs(newAttempts)),
+          nextRetryAt: exhausted ? null : new Date(Date.now() + getBackoffMs(newAttempts)),
         },
       });
+      if (exhausted) {
+        await logDeadLetter(delivery.webhook.projectId, delivery.event, delivery.webhook.url, errorMessage);
+      }
     } catch (dbErr) {
       // If the DB update itself fails, log and move on — cron will pick it up again
       console.error(`[webhooks] Failed to update delivery ${deliveryId} after error:`, dbErr);
     }
+  }
+}
+
+/**
+ * Log an activity when a webhook delivery enters the dead letter queue.
+ * This surfaces the failure in the project's activity feed.
+ */
+async function logDeadLetter(projectId: string, event: string, url: string, reason: string) {
+  try {
+    await prisma.activity.create({
+      data: {
+        type: "WEBHOOK_DEAD_LETTER",
+        message: `Webhook delivery failed after all retries: ${event} → ${url} (${reason})`,
+        projectId,
+      },
+    });
+  } catch (err) {
+    console.error("[webhooks] Failed to log dead letter activity:", err);
   }
 }
 

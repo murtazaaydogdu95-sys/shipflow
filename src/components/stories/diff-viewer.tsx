@@ -1,9 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { parseDiff, type DiffFile } from "@/lib/diff-parser";
+import { parseDiff } from "@/lib/diff-parser";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, FileCode, FilePlus, FileMinus, FileEdit } from "lucide-react";
+import { ChevronDown, ChevronRight, FileCode, FilePlus, FileMinus, FileEdit, AlertTriangle } from "lucide-react";
+
+/** Patterns that indicate potential security or quality risks in diffs */
+const RISK_PATTERNS = [
+  { pattern: /(?:api[_-]?key|secret|password|token)\s*[:=]/i, label: "Possible hardcoded secret" },
+  { pattern: /eval\s*\(|new\s+Function\s*\(|child_process/i, label: "Code execution risk" },
+  { pattern: /dangerouslySetInnerHTML|innerHTML\s*=/i, label: "XSS risk" },
+  { pattern: /\$queryRawUnsafe|\$executeRawUnsafe/i, label: "Raw SQL (injection risk)" },
+  { pattern: /console\.(log|debug)\(/i, label: "Debug logging" },
+  { pattern: /\.env|process\.env\.\w+\s*[=!]/i, label: "Environment variable reference" },
+  { pattern: /TODO|FIXME|HACK|XXX/i, label: "Unresolved TODO" },
+];
+
+function detectRisks(lines: Array<{ type: string; content: string }>): Array<{ lineIndex: number; label: string }> {
+  const risks: Array<{ lineIndex: number; label: string }> = [];
+  lines.forEach((line, i) => {
+    if (line.type !== "add") return;
+    for (const { pattern, label } of RISK_PATTERNS) {
+      if (pattern.test(line.content)) {
+        risks.push({ lineIndex: i, label });
+        break; // one risk per line
+      }
+    }
+  });
+  return risks;
+}
 
 interface DiffViewerProps {
   rawDiff: string;
@@ -41,6 +66,15 @@ export function DiffViewer({ rawDiff }: DiffViewerProps) {
   const totalAdditions = files.reduce((s, f) => s + f.additions, 0);
   const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
 
+  // Detect risks across all files
+  const fileRisks = new Map<string, Array<{ lineIndex: number; label: string }>>();
+  for (const file of files) {
+    const allLines = file.hunks.flatMap((h) => h.lines);
+    const risks = detectRisks(allLines);
+    if (risks.length > 0) fileRisks.set(file.filename, risks);
+  }
+  const totalRisks = Array.from(fileRisks.values()).reduce((s, r) => s + r.length, 0);
+
   function toggleCollapse(filename: string) {
     setCollapsedFiles((prev) => {
       const next = new Set(prev);
@@ -51,6 +85,22 @@ export function DiffViewer({ rawDiff }: DiffViewerProps) {
   }
 
   return (
+    <div className="space-y-3">
+      {totalRisks > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-medium text-amber-600">{totalRisks} potential {totalRisks === 1 ? "risk" : "risks"} detected</span>
+            <ul className="mt-1 text-xs text-muted-foreground space-y-0.5">
+              {Array.from(fileRisks.entries()).map(([filename, risks]) => (
+                <li key={filename}>
+                  <span className="font-mono">{filename.split("/").pop()}</span>: {risks.map((r) => r.label).join(", ")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     <div className="flex flex-col md:flex-row gap-3 h-full">
       {/* File sidebar */}
       <div className="md:w-64 shrink-0 border rounded-lg overflow-auto max-h-[500px]">
@@ -77,6 +127,11 @@ export function DiffViewer({ rawDiff }: DiffViewerProps) {
                 <span className="truncate flex-1 font-mono">
                   {file.filename.split("/").pop()}
                 </span>
+                {fileRisks.has(file.filename) && (
+                  <span title={`${fileRisks.get(file.filename)!.length} risk(s)`}>
+                    <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                  </span>
+                )}
                 <span className="text-[10px] text-muted-foreground shrink-0">
                   <span className="text-green-500">+{file.additions}</span>{" "}
                   <span className="text-red-500">-{file.deletions}</span>
@@ -156,6 +211,7 @@ export function DiffViewer({ rawDiff }: DiffViewerProps) {
           </div>
         ))}
       </div>
+    </div>
     </div>
   );
 }

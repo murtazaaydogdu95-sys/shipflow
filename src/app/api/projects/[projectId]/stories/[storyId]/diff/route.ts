@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { execFileSync } from "child_process";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function GET(
   req: Request,
@@ -18,6 +19,12 @@ export async function GET(
 
   if (!story?.branchName) {
     return NextResponse.json({ error: "No branch found" }, { status: 404 });
+  }
+
+  // Validate branch name to prevent git argument injection
+  const BRANCH_NAME_RE = /^[a-zA-Z0-9\/_.\-]+$/;
+  if (!BRANCH_NAME_RE.test(story.branchName)) {
+    return NextResponse.json({ error: "Invalid branch name" }, { status: 400 });
   }
 
   const project = await prisma.project.findUnique({
@@ -43,7 +50,7 @@ export async function GET(
 
     return NextResponse.json({ diff });
   } catch (err) {
-    console.error("[diff] git diff failed:", err);
+    console.error("[diff] git diff failed:", sanitizeError(err, "Failed to generate diff"));
     return NextResponse.json({ diff: "", error: "Failed to generate diff" });
   }
 }

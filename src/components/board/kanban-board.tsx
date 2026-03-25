@@ -20,11 +20,15 @@ import { useQuickCapture } from "@/components/providers/quick-capture-provider";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Snowflake, CheckSquare, X } from "lucide-react";
+import { Download, Upload, Snowflake, CheckSquare, X } from "lucide-react";
+import { StoryImportDialog } from "@/components/stories/story-import-dialog";
 
 import type { StoryWithRelations, BoardColumn as BoardColumnType, StoryStatus } from "@/types";
 import { STORY_STATUSES, ALL_STORY_STATUSES, COLUMN_TITLES } from "@/types";
 import { BoardFilters, EMPTY_FILTERS, type BoardFilterState } from "./board-filters";
+import { SavedFilters } from "./saved-filters";
+
+export type WipLimits = Record<string, number | null>;
 
 interface KanbanBoardProps {
   initialColumns: BoardColumnType[];
@@ -49,6 +53,12 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
   const knownReviewIds = useRef<Set<string>>(new Set());
   const { onStoryCreated } = useQuickCapture();
 
+  // WIP limits
+  const [wipLimits, setWipLimits] = useState<WipLimits>({});
+
+  // Import dialog
+  const [showImportDialog, setShowImportDialog] = useState(false);
+
   // ICEBOX column toggle
   const [showIcebox, setShowIcebox] = useState(false);
 
@@ -65,9 +75,26 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
   // Prevent DndContext hydration mismatch — only mount after client hydration
   useEffect(() => setMounted(true), []);
 
+  // Fetch WIP limits from project settings
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load project settings (${r.status})`);
+        return r.json();
+      })
+      .then((p) => {
+        if (p.wipLimits && typeof p.wipLimits === "object") {
+          setWipLimits(p.wipLimits);
+        }
+      })
+      .catch((err) => {
+        console.warn("[board] WIP limits fetch failed:", err instanceof Error ? err.message : err);
+      });
+  }, [projectId]);
+
   // Track last fetch timestamp for delta sync and data fingerprint
-  const lastFetchedAt = useRef<string | null>(null);
   const lastDataFingerprint = useRef<string>("");
+  const consecutiveFailures = useRef(0);
 
   // Poll for board updates (agent status changes, review notifications)
   useEffect(() => {
@@ -77,21 +104,18 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
 
     const interval = setInterval(async () => {
       try {
-        const headers: Record<string, string> = {};
-        if (lastFetchedAt.current) {
-          headers["If-Modified-Since"] = lastFetchedAt.current;
+        const res = await fetch(`/api/projects/${projectId}/stories`);
+
+        if (!res.ok) {
+          consecutiveFailures.current++;
+          if (consecutiveFailures.current === 3) {
+            toast.error("Board sync is having trouble. Changes may be delayed.");
+          }
+          return;
         }
-
-        const res = await fetch(`/api/projects/${projectId}/stories`, { headers });
-
-        // 304 Not Modified — no changes since last fetch
-        if (res.status === 304) return;
-        if (!res.ok) return;
+        consecutiveFailures.current = 0;
 
         const stories: StoryWithRelations[] = await res.json();
-
-        // Track last successful fetch time
-        lastFetchedAt.current = new Date().toUTCString();
 
         // Only update state if data actually changed (compare count + latest updatedAt)
         const latestUpdatedAt = stories.reduce((max, s) => {
@@ -138,7 +162,10 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
           return updated || prev;
         });
       } catch {
-        // ignore polling errors
+        consecutiveFailures.current++;
+        if (consecutiveFailures.current === 3) {
+          toast.error("Board sync is having trouble. Changes may be delayed.");
+        }
       }
     }, 15000);
     return () => clearInterval(interval);
@@ -213,7 +240,29 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
           body: JSON.stringify({ status, position }),
         }
       );
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 422 && body.error?.includes("WIP limit")) {
+          toast.error(body.error);
+          // Revert the optimistic UI update by re-fetching
+          const refreshRes = await fetch(`/api/projects/${projectId}/stories`);
+          if (refreshRes.ok) {
+            const stories: StoryWithRelations[] = await refreshRes.json();
+            const grouped: Record<string, StoryWithRelations[]> = {};
+            for (const s of stories) {
+              (grouped[s.status] ||= []).push(s);
+            }
+            setColumns((prev) =>
+              prev.map((col) => ({
+                ...col,
+                stories: (grouped[col.id] || []).sort((a, b) => a.position - b.position),
+              }))
+            );
+          }
+          return;
+        }
+        throw new Error(body.error || "Failed to move story");
+      }
     } catch {
       toast.error("Failed to move story");
     }
@@ -466,6 +515,11 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
           />
         </div>
         <div className="flex items-center gap-1.5 px-4 py-1 shrink-0">
+          <SavedFilters
+            projectId={projectId}
+            currentFilters={filters}
+            onApplyFilter={setFilters}
+          />
           <Button
             variant={showIcebox ? "default" : "ghost"}
             size="sm"
@@ -488,6 +542,17 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
             <CheckSquare className="h-3.5 w-3.5" />
             Bulk
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowImportDialog(true)}
+            title="Import stories from CSV/JSON"
+            className="h-7 text-xs gap-1"
+            data-testid="board-import-btn"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Import
+          </Button>
           <Select onValueChange={(v) => handleExport(v as "csv" | "json")}>
             <SelectTrigger className="h-7 w-auto gap-1 text-xs border-0 shadow-none" data-testid="board-export-btn">
               <Download className="h-3.5 w-3.5" />
@@ -500,6 +565,17 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
           </Select>
         </div>
       </div>
+
+      {/* Import Dialog */}
+      <StoryImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        projectId={projectId}
+        onImported={() => {
+          // Trigger a board refresh by resetting the fingerprint so polling picks up changes
+          lastDataFingerprint.current = "";
+        }}
+      />
 
       {/* Bulk actions bar */}
       {bulkMode && selectedIds.size > 0 && (
@@ -553,6 +629,8 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
                       _isSelected: selectedIds.has(s.id),
                       _isFocused: colIdx === focusedCol && rowIdx === focusedRow,
                     }))}
+                    wipLimit={wipLimits[status] ?? null}
+                    totalCount={col.stories.length}
                     onStoryClick={(story) => {
                       if (bulkMode) {
                         setSelectedIds((prev) => {
@@ -605,7 +683,6 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
       <StoryDetailModal
         story={selectedStory}
         projectId={projectId}
-        labels={labels}
         onClose={() => setSelectedStory(null)}
         onUpdated={handleStoryUpdated}
       />

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { PipelineSection } from "./pipeline-section";
 import { FeedStoryCard } from "./feed-story-card";
 import { StoryDetailModal } from "@/components/stories/story-detail-modal";
-import { BoardFilters, EMPTY_FILTERS, type BoardFilterState } from "@/components/board/board-filters";
+import { BoardFilters, type BoardFilterState } from "@/components/board/board-filters";
 import { useQuickCapture } from "@/components/providers/quick-capture-provider";
 import type { StoryWithRelations, BoardColumn as BoardColumnType, StoryStatus } from "@/types";
 import { FEED_STATUS_ORDER, FEED_SECTION_TITLES, PRIORITIES } from "@/types";
@@ -53,11 +53,20 @@ export function PipelineFeed({
   }, [initialColumns]);
 
   // Poll for story updates
+  const consecutiveFailures = useRef(0);
+
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/projects/${projectId}/stories`);
-        if (!res.ok) return;
+        if (!res.ok) {
+          consecutiveFailures.current++;
+          if (consecutiveFailures.current === 3) {
+            toast.error("Feed sync is having trouble. Changes may be delayed.");
+          }
+          return;
+        }
+        consecutiveFailures.current = 0;
         const fetched: StoryWithRelations[] = await res.json();
 
         // Check for new REVIEW stories
@@ -82,7 +91,10 @@ export function PipelineFeed({
           return fetched.find((s) => s.id === prev.id) || prev;
         });
       } catch {
-        // ignore polling errors
+        consecutiveFailures.current++;
+        if (consecutiveFailures.current === 3) {
+          toast.error("Feed sync is having trouble. Changes may be delayed.");
+        }
       }
     }, 5000);
     return () => clearInterval(interval);
@@ -207,7 +219,6 @@ export function PipelineFeed({
       <StoryDetailModal
         story={selectedStory}
         projectId={projectId}
-        labels={labels}
         onClose={() => setSelectedStory(null)}
         onUpdated={handleStoryUpdated}
       />

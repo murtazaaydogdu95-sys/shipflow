@@ -119,3 +119,4 @@ function rateLimit(config: RateLimitConfig) {
 // Pre-configured rate limiters
 export const apiRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 60, prefix: "rl:api" });
 export const authRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 10, prefix: "rl:auth" });
+export const aiRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 10, prefix: "rl:ai" });

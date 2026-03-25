@@ -21,6 +21,12 @@ export async function POST(
     return NextResponse.json({ error: "No branch to revert" }, { status: 400 });
   }
 
+  // Validate branch name to prevent git argument injection
+  const BRANCH_NAME_RE = /^[a-zA-Z0-9\/_.\-]+$/;
+  if (!BRANCH_NAME_RE.test(story.branchName)) {
+    return NextResponse.json({ error: "Invalid branch name" }, { status: 400 });
+  }
+
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { agentWorkingDir: true },

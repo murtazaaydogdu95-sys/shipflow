@@ -16,7 +16,7 @@ export const PLAN_LIMITS = {
   FREE: {
     maxProjects: 3,
     maxStoriesPerProject: 15,
-    maxAIRewritesPerMonth: 4,
+    maxAIRewritesPerMonth: 15,
     aiModel: "claude-haiku-4-5-20250414",
     maxConcurrentAgents: 1,
     priorityQueue: false,

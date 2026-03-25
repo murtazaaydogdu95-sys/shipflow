@@ -30,7 +30,6 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 interface StoryDetailModalProps {
   story: StoryWithRelations | null;
   projectId: string;
-  labels: Array<{ id: string; name: string; color: string }>;
   onClose: () => void;
   onUpdated: (story: StoryWithRelations) => void;
 }
@@ -38,7 +37,6 @@ interface StoryDetailModalProps {
 export function StoryDetailModal({
   story,
   projectId,
-  labels,
   onClose,
   onUpdated,
 }: StoryDetailModalProps) {
@@ -54,6 +52,7 @@ export function StoryDetailModal({
   const [commentLoading, setCommentLoading] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+  const [hasViewedDiff, setHasViewedDiff] = useState(false);
 
   const { memberCount } = useSoloMode();
   const isOpen = !!story;
@@ -87,7 +86,18 @@ export function StoryDetailModal({
 
   const { data: diffData } = useSWR(
     isOpen && story?.branchName && activeTab === "diff" ? `/api/projects/${projectId}/stories/${story.id}/diff` : null,
-    fetcher
+    fetcher,
+    {
+      onSuccess: (data) => {
+        if (data?.diff && story && !hasViewedDiff) {
+          setHasViewedDiff(true);
+          // Persist review confirmation server-side
+          fetch(`/api/projects/${projectId}/stories/${story.id}/confirm-review`, {
+            method: "POST",
+          }).catch(() => {});
+        }
+      },
+    }
   );
 
   // Sync state when story changes
@@ -99,6 +109,7 @@ export function StoryDetailModal({
     setEditPoints(story.storyPoints ? String(story.storyPoints) : "");
     setEditAssigneeId(story.assigneeId || "");
     setActiveTab("details");
+    setHasViewedDiff(false);
   }
 
   async function handleSave() {
@@ -230,6 +241,16 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
           previewPid: null,
         }),
       });
+
+      // Store rejection as persistent activity for agent learning
+      await fetch(`/api/projects/${projectId}/stories/${story.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: `[Agent Rejection] ${feedback}`,
+          metadata: JSON.stringify({ type: "AGENT_REJECTED", feedback, storyType: (story as StoryWithRelations & { type?: string }).type || "feature" }),
+        }),
+      }).catch(() => {}); // non-critical
       // Trigger agent with feedback (agent will checkout existing branch)
       await fetch(`/api/projects/${projectId}/stories/${story.id}/trigger-agent`, {
         method: "POST",
@@ -332,6 +353,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
     setEditPoints("");
     setEditAssigneeId("");
     setCommentText("");
+    setHasViewedDiff(false);
     onClose();
   }
 
@@ -427,10 +449,12 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                   deployUrl: story.deployUrl,
                 }}
                 reviewLoading={reviewLoading}
+                hasViewedDiff={hasViewedDiff}
                 onApprove={handleApprove}
                 onReject={handleReject}
                 onRevert={handleRevert}
                 onDeploy={handleDeploy}
+                onViewDiff={() => setActiveTab("diff")}
                 deploying={deploying}
               />
             )}

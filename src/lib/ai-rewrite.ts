@@ -4,8 +4,13 @@ import OpenAI from "openai";
 interface RewriteOptions {
   provider: string;
   apiKey?: string;
-  prompt: string;
+  /** System instructions (trusted, not user-controlled) */
+  systemPrompt: string;
+  /** User input (untrusted, isolated from system instructions) */
+  userMessage: string;
   model?: string;
+  /** @deprecated Use systemPrompt + userMessage instead. Falls back to single user message. */
+  prompt?: string;
 }
 
 /** Extract and parse JSON from LLM text that may contain markdown fences or extra text */
@@ -31,15 +36,24 @@ function parseAIJson(text: string): Record<string, unknown> {
   return JSON.parse(cleaned.slice(start, end + 1));
 }
 
-export async function rewriteWithAI({ provider, apiKey, prompt, model }: RewriteOptions): Promise<Record<string, unknown>> {
+export async function rewriteWithAI({ provider, apiKey, systemPrompt, userMessage, model, prompt }: RewriteOptions): Promise<Record<string, unknown>> {
+  // Build messages with system/user separation to prevent prompt injection.
+  // User input is always in the user message, never in system instructions.
+  const system = systemPrompt || "";
+  const user = userMessage || prompt || "";
+
   if (provider === "ollama") {
     const ollama = new OpenAI({
       baseURL: process.env.OLLAMA_URL || "http://localhost:11434/v1",
       apiKey: "ollama",
     });
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+    if (system) messages.push({ role: "system", content: system });
+    messages.push({ role: "user", content: user });
+
     const completion = await ollama.chat.completions.create({
       model: "llama3.2",
-      messages: [{ role: "user", content: prompt }],
+      messages,
     });
 
     const text = completion.choices[0]?.message?.content;
@@ -49,10 +63,14 @@ export async function rewriteWithAI({ provider, apiKey, prompt, model }: Rewrite
 
   if (provider === "openai") {
     const openai = new OpenAI({ apiKey });
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+    if (system) messages.push({ role: "system", content: system });
+    messages.push({ role: "user", content: user });
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       max_tokens: 1024,
-      messages: [{ role: "user", content: prompt }],
+      messages,
     });
 
     const text = completion.choices[0]?.message?.content;
@@ -60,12 +78,13 @@ export async function rewriteWithAI({ provider, apiKey, prompt, model }: Rewrite
     return parseAIJson(text);
   }
 
-  // Default: Anthropic
+  // Default: Anthropic — uses native system parameter
   const anthropic = new Anthropic({ apiKey });
   const message = await anthropic.messages.create({
     model: model || "claude-sonnet-4-20250514",
     max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
+    ...(system ? { system } : {}),
+    messages: [{ role: "user", content: user }],
   });
 
   const textContent = message.content[0];

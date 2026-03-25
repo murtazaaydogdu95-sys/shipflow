@@ -208,6 +208,95 @@ describe("PATCH /api/projects/[projectId]/stories/[storyId]", () => {
 
     expect(res.status).toBe(404);
   });
+
+  describe("review enforcement", () => {
+    it("blocks REVIEW→DONE for agent stories without review confirmation", async () => {
+      setupPatchMocks(makeStoryData({
+        status: "REVIEW",
+        assignedToAgent: true,
+        reviewedAt: null,
+      }));
+
+      const req = makeRequest("PATCH", BASE_URL, { status: "DONE" });
+      const res = await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+      expect(res.status).toBe(422);
+      const body = await parseResponse(res);
+      expect(body.error).toContain("Code review required");
+    });
+
+    it("allows REVIEW→DONE for agent stories WITH review confirmation", async () => {
+      const reviewedStory = makeStoryData({
+        status: "REVIEW",
+        assignedToAgent: true,
+        reviewedAt: new Date(),
+        reviewedBy: USER_ID,
+      });
+      setupPatchMocks(reviewedStory);
+      mockPrisma.story.update.mockResolvedValue({
+        ...reviewedStory,
+        status: "DONE",
+        labels: [],
+        acceptanceCriteria: [],
+        assignee: null,
+      });
+
+      const req = makeRequest("PATCH", BASE_URL, { status: "DONE" });
+      const res = await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+      expect(res.status).toBe(200);
+    });
+
+    it("allows REVIEW→DONE for non-agent stories without review confirmation", async () => {
+      const manualStory = makeStoryData({
+        status: "REVIEW",
+        assignedToAgent: false,
+        reviewedAt: null,
+      });
+      setupPatchMocks(manualStory);
+      mockPrisma.story.update.mockResolvedValue({
+        ...manualStory,
+        status: "DONE",
+        labels: [],
+        acceptanceCriteria: [],
+        assignee: null,
+      });
+
+      const req = makeRequest("PATCH", BASE_URL, { status: "DONE" });
+      const res = await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+      expect(res.status).toBe(200);
+    });
+
+    it("clears reviewedAt when story moves away from REVIEW", async () => {
+      const reviewedStory = makeStoryData({
+        status: "REVIEW",
+        assignedToAgent: true,
+        reviewedAt: new Date(),
+        reviewedBy: USER_ID,
+      });
+      setupPatchMocks(reviewedStory);
+      mockPrisma.story.update.mockResolvedValue({
+        ...reviewedStory,
+        status: "TODO",
+        labels: [],
+        acceptanceCriteria: [],
+        assignee: null,
+      });
+
+      const req = makeRequest("PATCH", BASE_URL, { status: "TODO", agentStatus: null });
+      await PATCH(req, makeParams({ projectId: PROJECT_ID, storyId: STORY_ID }));
+
+      expect(mockPrisma.story.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            reviewedAt: null,
+            reviewedBy: null,
+          }),
+        })
+      );
+    });
+  });
 });
 
 describe("DELETE /api/projects/[projectId]/stories/[storyId]", () => {

@@ -11,7 +11,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { FolderKanban, FileText, Plus, Settings, Users, BarChart3, Search } from "lucide-react";
+import { FolderKanban, FileText, Plus, Settings, Users, BarChart3 } from "lucide-react";
 
 interface StoryResult {
   id: string;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "sonner";
 import {
   Bot,
   Check,
@@ -87,9 +88,14 @@ export function FeedStoryCard({
         });
         onMoveToTodo?.();
       } else if (action === "build") {
-        await fetch(`/api/projects/${projectId}/stories/${story.id}/trigger-agent`, {
+        const res = await fetch(`/api/projects/${projectId}/stories/${story.id}/trigger-agent`, {
           method: "POST",
         });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Failed to trigger agent");
+          return;
+        }
         onTriggerAgent?.();
       }
     } finally {

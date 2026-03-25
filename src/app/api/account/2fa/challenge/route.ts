@@ -47,11 +47,12 @@ export async function POST(req: Request) {
     let matchIndex = -1;
     for (let i = 0; i < hashedCodes.length; i++) {
       const codeBuffer = Buffer.from(hashedCodes[i], "utf-8");
-      if (
-        inputBuffer.length === codeBuffer.length &&
-        timingSafeEqual(inputBuffer, codeBuffer)
-      ) {
-        matchIndex = i;
+      try {
+        if (timingSafeEqual(inputBuffer, codeBuffer)) {
+          matchIndex = i;
+        }
+      } catch {
+        // timingSafeEqual throws on length mismatch — continue to maintain constant time
       }
       // Continue iterating ALL codes to avoid leaking which index matched
     }
