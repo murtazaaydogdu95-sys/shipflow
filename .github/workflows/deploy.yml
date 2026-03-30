@@ -126,13 +126,18 @@ jobs:
             --set env.GITHUB_SECRET="${{ secrets.OAUTH_GITHUB_SECRET }}" \
             --set env.GOOGLE_ID="${{ secrets.OAUTH_GOOGLE_ID }}" \
             --set env.GOOGLE_SECRET="${{ secrets.OAUTH_GOOGLE_SECRET }}" \
+            --set ingress.className=traefik \
+            --set ingress.annotations=null \
             --set ingress.hosts[0].host="${{ vars.DOMAIN }}" \
             --set ingress.hosts[0].paths[0].path=/ \
             --set ingress.hosts[0].paths[0].pathType=Prefix \
             --set ingress.tls[0].secretName=codepylot-tls \
             --set ingress.tls[0].hosts[0]="${{ vars.DOMAIN }}" \
+            --set backup.enabled=false \
+            --set postgresql.storage.storageClass=local-path \
+            --set persistence.repos.storageClass=local-path \
             --wait \
-            --timeout 5m \
+            --timeout 10m \
             --history-max 5
 
       - name: Verify rollout
