@@ -37,9 +37,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install git (needed for GitHub import clone) and prisma CLI + tsx + dotenv for entrypoint
+# Install git (needed for GitHub import clone) and prisma CLI + tsx for entrypoint
 RUN apk add --no-cache git && \
-    npm install -g prisma@6 tsx dotenv
+    npm install -g prisma@6 tsx
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
