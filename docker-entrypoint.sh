@@ -25,8 +25,9 @@ done
 echo "PostgreSQL is ready!"
 
 # Push schema (creates tables if they don't exist)
+# Use --schema flag directly to avoid prisma.config.ts module resolution issues in production
 echo "Running prisma db push..."
-npx prisma db push --skip-generate
+npx prisma db push --skip-generate --schema prisma/schema.prisma
 
 echo "Starting Codepylot..."
 exec node server.js
