@@ -39,7 +39,7 @@ async function collectGoalIds(goalId: string, maxDepth: number): Promise<string[
       where: { parentId: { in: currentLevel } },
       select: { id: true },
     });
-    const childIds = children.map((c) => c.id);
+    const childIds = children.map((c: { id: string }) => c.id);
     ids.push(...childIds);
     currentLevel = childIds;
   }
@@ -58,7 +58,7 @@ export async function detectGoalCycle(goalId: string, parentId: string): Promise
   for (let i = 0; i < maxHops && currentId; i++) {
     if (currentId === goalId) return true;
 
-    const parent = await prisma.goal.findUnique({
+    const parent: { parentId: string | null } | null = await prisma.goal.findUnique({
       where: { id: currentId },
       select: { parentId: true },
     });
@@ -77,7 +77,7 @@ async function getGoalDepth(goalId: string): Promise<number> {
   const maxHops = 10;
 
   for (let i = 0; i < maxHops && currentId; i++) {
-    const goal = await prisma.goal.findUnique({
+    const goal: { parentId: string | null } | null = await prisma.goal.findUnique({
       where: { id: currentId },
       select: { parentId: true },
     });

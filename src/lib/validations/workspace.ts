@@ -9,7 +9,7 @@ export const createWorkspaceSchema = z.object({
     .optional()
     .nullable(),
   cloneUrl: z.string().url().optional().nullable(),
-  metadata: z.record(z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 export const updateWorkspaceSchema = z.object({
@@ -20,7 +20,7 @@ export const updateWorkspaceSchema = z.object({
     .optional()
     .nullable(),
   closedAt: z.string().datetime().optional().nullable(),
-  metadata: z.record(z.unknown()).optional().nullable(),
+  metadata: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
