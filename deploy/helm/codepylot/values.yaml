@@ -1,0 +1,93 @@
+replicaCount: 1
+
+image:
+  repository: codepylot
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: app.codepylot.dev
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: codepylot-tls
+      hosts:
+        - app.codepylot.dev
+
+postgresql:
+  enabled: true  # Set false to use external DB
+  image: postgres:16-alpine
+  auth:
+    username: codepylot
+    password: codepylot
+    database: codepylot
+  storage:
+    size: 10Gi
+    storageClass: ""  # Use default
+
+ollama:
+  enabled: false  # Optional local AI
+  image: ollama/ollama:latest
+  storage:
+    size: 20Gi
+
+env:
+  AUTH_SECRET: ""  # REQUIRED -- generate with: openssl rand -base64 32
+  NEXTAUTH_URL: "https://app.codepylot.dev"
+  GITHUB_ID: ""
+  GITHUB_SECRET: ""
+  GOOGLE_ID: ""
+  GOOGLE_SECRET: ""
+  ENCRYPTION_KEY: ""  # REQUIRED -- generate with: openssl rand -hex 32
+  CRON_SECRET: ""  # REQUIRED -- generate with: openssl rand -hex 16
+
+# External database (when postgresql.enabled=false)
+externalDatabase:
+  url: ""  # e.g. postgresql://user:pass@host:5432/codepylot
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+cronjobs:
+  scheduler:
+    schedule: "* * * * *"
+  agentCleanup:
+    schedule: "*/15 * * * *"
+  webhookRetry:
+    schedule: "*/5 * * * *"
+  digest:
+    schedule: "0 8 * * *"
+
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retention:
+    days: 7
+    weeks: 4
+    months: 6
+
+persistence:
+  repos:
+    size: 5Gi
+    storageClass: ""

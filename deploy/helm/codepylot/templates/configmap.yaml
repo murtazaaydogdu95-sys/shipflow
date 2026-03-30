@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "codepylot.fullname" . }}-config
+  labels:
+    {{- include "codepylot.labels" . | nindent 4 }}
+data:
+  NODE_ENV: "production"
+  NEXT_TELEMETRY_DISABLED: "1"
+  AUTH_TRUST_HOST: "true"
+  NEXTAUTH_URL: {{ .Values.env.NEXTAUTH_URL | quote }}
+  CODEPYLOT_REPOS_DIR: "/app/repos"
+  {{- if .Values.ollama.enabled }}
+  OLLAMA_URL: {{ include "codepylot.ollamaUrl" . | quote }}
+  {{- end }}

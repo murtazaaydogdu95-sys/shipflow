@@ -1,0 +1,31 @@
+CodePylot has been deployed successfully!
+
+1. Access the application:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+   https://{{ .host }}
+{{- end }}
+{{- else }}
+   kubectl port-forward svc/{{ include "codepylot.fullname" . }} 3000:{{ .Values.service.port }}
+   Then open http://localhost:3000
+{{- end }}
+
+2. Check pod status:
+   kubectl get pods -l "app.kubernetes.io/name={{ include "codepylot.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+3. View application logs:
+   kubectl logs -l "app.kubernetes.io/name={{ include "codepylot.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -f
+
+4. View PostgreSQL logs:
+{{- if .Values.postgresql.enabled }}
+   kubectl logs -l "app.kubernetes.io/name={{ include "codepylot.name" . }}-postgresql" -f
+{{- else }}
+   Using external database — no PostgreSQL pod deployed.
+{{- end }}
+
+IMPORTANT REMINDERS:
+- Make sure AUTH_SECRET is set (generate with: openssl rand -base64 32)
+- Make sure ENCRYPTION_KEY is set (generate with: openssl rand -hex 32)
+- Make sure CRON_SECRET is set (generate with: openssl rand -hex 16)
+- Configure GITHUB_ID/GITHUB_SECRET for GitHub OAuth login
+- Configure GOOGLE_ID/GOOGLE_SECRET for Google OAuth login

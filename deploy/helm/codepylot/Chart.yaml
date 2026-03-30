@@ -1,0 +1,6 @@
+apiVersion: v2
+name: codepylot
+description: AI Sprint Board for Indie Hackers — Agents write code, you review
+version: 1.0.0
+appVersion: "1.0.0"
+type: application

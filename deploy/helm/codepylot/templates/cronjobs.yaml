@@ -1,0 +1,166 @@
+{{- $fullName := include "codepylot.fullname" . -}}
+{{- $labels := include "codepylot.labels" . -}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-scheduler
+  labels:
+    {{- $labels | nindent 4 }}
+    app.kubernetes.io/component: cronjob-scheduler
+spec:
+  schedule: {{ .Values.cronjobs.scheduler.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: scheduler
+              image: curlimages/curl:latest
+              resources:
+                limits:
+                  cpu: 50m
+                  memory: 32Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  curl -sf -X POST \
+                    -H "Authorization: Bearer $(CRON_SECRET)" \
+                    "http://{{ $fullName }}:{{ .Values.service.port }}/api/cron/recurring"
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $fullName }}-secret
+                      key: CRON_SECRET
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-agent-cleanup
+  labels:
+    {{- $labels | nindent 4 }}
+    app.kubernetes.io/component: cronjob-agent-cleanup
+spec:
+  schedule: {{ .Values.cronjobs.agentCleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: agent-cleanup
+              image: curlimages/curl:latest
+              resources:
+                limits:
+                  cpu: 50m
+                  memory: 32Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  curl -sf -X POST \
+                    -H "Authorization: Bearer $(CRON_SECRET)" \
+                    "http://{{ $fullName }}:{{ .Values.service.port }}/api/cron/agent-cleanup"
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $fullName }}-secret
+                      key: CRON_SECRET
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-webhook-retry
+  labels:
+    {{- $labels | nindent 4 }}
+    app.kubernetes.io/component: cronjob-webhook-retry
+spec:
+  schedule: {{ .Values.cronjobs.webhookRetry.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: webhook-retry
+              image: curlimages/curl:latest
+              resources:
+                limits:
+                  cpu: 50m
+                  memory: 32Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  curl -sf -X POST \
+                    -H "Authorization: Bearer $(CRON_SECRET)" \
+                    "http://{{ $fullName }}:{{ .Values.service.port }}/api/cron/webhook-retry"
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $fullName }}-secret
+                      key: CRON_SECRET
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-digest
+  labels:
+    {{- $labels | nindent 4 }}
+    app.kubernetes.io/component: cronjob-digest
+spec:
+  schedule: {{ .Values.cronjobs.digest.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: digest
+              image: curlimages/curl:latest
+              resources:
+                limits:
+                  cpu: 50m
+                  memory: 32Mi
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  curl -sf -X POST \
+                    -H "Authorization: Bearer $(CRON_SECRET)" \
+                    "http://{{ $fullName }}:{{ .Values.service.port }}/api/cron/digest"
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $fullName }}-secret
+                      key: CRON_SECRET
