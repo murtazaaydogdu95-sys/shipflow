@@ -24,8 +24,10 @@ done
 
 echo "PostgreSQL is ready!"
 
+# Remove prisma.config.ts in production to avoid module resolution errors
+rm -f /app/prisma.config.ts
+
 # Push schema (creates tables if they don't exist)
-# Use --schema flag directly to avoid prisma.config.ts module resolution issues in production
 echo "Running prisma db push..."
 npx prisma db push --skip-generate --schema prisma/schema.prisma
 
