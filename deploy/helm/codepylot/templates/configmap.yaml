@@ -8,6 +8,7 @@ data:
   NODE_ENV: "production"
   NEXT_TELEMETRY_DISABLED: "1"
   AUTH_TRUST_HOST: "true"
+  DATABASE_URL: {{ include "codepylot.databaseUrl" . | quote }}
   NEXTAUTH_URL: {{ .Values.env.NEXTAUTH_URL | quote }}
   CODEPYLOT_REPOS_DIR: "/app/repos"
   {{- if .Values.ollama.enabled }}
