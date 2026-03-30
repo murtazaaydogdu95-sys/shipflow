@@ -56,7 +56,7 @@ export async function isQueueBlocked(projectId: string): Promise<boolean> {
  * This prevents the race condition where two concurrent requests both pass
  * isQueueBlocked() and exceed the limit.
  */
-export async function claimAgentSlot(storyId: string, projectId: string): Promise<boolean> {
+export async function claimAgentSlot(storyId: string, projectId: string, agentId?: string): Promise<boolean> {
   const maxAgents = await resolveMaxAgents(projectId);
 
   // Use a serializable transaction to atomically check count + claim slot
@@ -80,8 +80,17 @@ export async function claimAgentSlot(storyId: string, projectId: string): Promis
           agentStatus: "QUEUED",
           assignedToAgent: true,
           agentTriggeredAt: new Date(),
+          ...(agentId ? { agentId } : {}),
         },
       });
+
+      // Update Agent record status if agentId is provided
+      if (agentId) {
+        await tx.agent.update({
+          where: { id: agentId },
+          data: { status: "running", lastHeartbeatAt: new Date() },
+        });
+      }
     }, { isolationLevel: "Serializable" });
 
     return true;

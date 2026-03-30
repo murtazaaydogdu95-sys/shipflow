@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { isQueueBlocked, findNextStory } from "@/lib/agent-queue";
 import { spawnAgent, AGENT_TIMEOUT_MS } from "@/lib/agent-executor";
+import { checkBudget } from "@/lib/budget-check";
 
 // Re-export for backward compatibility (used by agent-cleanup cron)
 export { AGENT_TIMEOUT_MS };
@@ -8,6 +9,7 @@ export { AGENT_TIMEOUT_MS };
 interface TriggerOptions {
   storyId: string;
   projectId: string;
+  agentId?: string;
   force?: boolean;
   feedback?: string;
 }
@@ -69,9 +71,37 @@ export async function processNextStory(projectId: string) {
     });
   }
 
+  // Select an idle agent for this project's org (round-robin by least stories completed)
+  const proj = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true },
+  });
+  let idleAgentId: string | undefined;
+  if (proj?.orgId) {
+    const idleAgent = await prisma.agent.findFirst({
+      where: { orgId: proj.orgId, status: "idle" },
+      orderBy: { storiesCompleted: "asc" },
+      select: { id: true },
+    });
+    idleAgentId = idleAgent?.id;
+  }
+
+  // Budget gate: check before spawning
+  if (proj?.orgId && idleAgentId) {
+    const budgetResult = await checkBudget(idleAgentId, projectId, proj.orgId);
+    if (!budgetResult.allowed) {
+      console.log(`[agent-trigger] processNextStory: budget blocked — ${budgetResult.reason}`);
+      return;
+    }
+    if (budgetResult.warnings.length > 0) {
+      console.log(`[agent-trigger] budget warnings: ${budgetResult.warnings.join("; ")}`);
+    }
+  }
+
   await spawnAgent({
     storyId: story.id,
     projectId,
+    agentId: idleAgentId,
     onComplete: (pid) => processNextStory(pid).catch(console.error),
   });
 
@@ -89,7 +119,7 @@ export type TriggerResult =
   | { triggered: true }
   | { triggered: false; reason: string };
 
-export async function triggerClaudeAgent({ storyId, projectId, force, feedback }: TriggerOptions): Promise<TriggerResult> {
+export async function triggerClaudeAgent({ storyId, projectId, agentId, force, feedback }: TriggerOptions): Promise<TriggerResult> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
@@ -112,9 +142,22 @@ export async function triggerClaudeAgent({ storyId, projectId, force, feedback }
   if (!story) return { triggered: false, reason: "Story not found" };
   if (story.agentStatus === "RUNNING") return { triggered: false, reason: "Agent is already running on this story" };
 
+  // Budget gate: check before spawning
+  const proj = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true },
+  });
+  if (proj?.orgId && agentId) {
+    const budgetResult = await checkBudget(agentId, projectId, proj.orgId);
+    if (!budgetResult.allowed) {
+      return { triggered: false, reason: budgetResult.reason ?? "Budget exceeded" };
+    }
+  }
+
   await spawnAgent({
     storyId,
     projectId,
+    agentId,
     feedback,
     onComplete: (pid) => processNextStory(pid).catch(console.error),
   });

@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
-import { Bell, Check } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Bell, Check, ShieldCheck, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,13 +35,28 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const { data: session } = useSession();
+  const orgId = session?.user?.orgId;
 
   const { data, mutate } = useSWR("/api/notifications", fetcher, {
     refreshInterval: 30000,
   });
 
+  const { data: pendingApprovals } = useSWR(
+    orgId ? `/api/orgs/${orgId}/approvals?status=pending` : null,
+    fetcher,
+    { refreshInterval: 60000 }
+  );
+
+  const { data: unreadData } = useSWR("/api/unread-count", fetcher, {
+    refreshInterval: 30000,
+  });
+
   const notifications: NotificationItem[] = data?.notifications || [];
   const unreadCount: number = data?.unreadCount || 0;
+  const pendingApprovalCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0;
+  const unreadTotal: number = unreadData?.total || 0;
+  const totalBadgeCount = Math.max(unreadCount + pendingApprovalCount, unreadTotal);
 
   // Close on outside click
   useEffect(() => {
@@ -86,9 +102,9 @@ export function NotificationBell() {
         onClick={() => setOpen(!open)}
       >
         <Bell className="h-4 w-4" />
-        {unreadCount > 0 && (
+        {totalBadgeCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {totalBadgeCount > 9 ? "9+" : totalBadgeCount}
           </span>
         )}
       </Button>
@@ -107,8 +123,17 @@ export function NotificationBell() {
               </button>
             )}
           </div>
+          {pendingApprovalCount > 0 && (
+            <button
+              onClick={() => { router.push("/org/approvals"); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-accent/50 transition-colors border-b text-sm"
+            >
+              <ShieldCheck className="h-4 w-4 text-yellow-500 shrink-0" />
+              <span className="flex-1">{pendingApprovalCount} pending approval{pendingApprovalCount !== 1 ? "s" : ""}</span>
+            </button>
+          )}
           <div className="max-h-[360px] overflow-y-auto">
-            {notifications.length === 0 ? (
+            {notifications.length === 0 && pendingApprovalCount === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
                 No notifications
               </p>
@@ -140,6 +165,14 @@ export function NotificationBell() {
               ))
             )}
           </div>
+          <button
+            data-testid="notification-inbox-link"
+            onClick={() => { router.push("/inbox"); setOpen(false); }}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors border-t"
+          >
+            <Inbox className="h-3.5 w-3.5" />
+            View inbox
+          </button>
         </div>
       )}
     </div>

@@ -41,6 +41,10 @@ model User {
   auditLogs        AuditLog[]     @relation("AuditLogs")
   subscription     Subscription?
   savedFilters     SavedFilter[]
+  requestedApprovals  Approval[]        @relation("ApprovalRequester")
+  decidedApprovals    Approval[]        @relation("ApprovalDecider")
+  approvalComments    ApprovalComment[]
+  readStates       ReadState[]
   currentOrg       Organization? @relation("UserCurrentOrg", fields: [currentOrgId], references: [id], onDelete: SetNull)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -105,13 +109,20 @@ model Organization {
   plan             String        @default("FREE")
   paddleCustomerId String?  @unique
   isPersonal       Boolean       @default(false)
+  issuePrefix      String?
+  issueCounter     Int           @default(0)
   members          OrgMember[]
   projects         Project[]
   invites          OrgInvite[]
   auditLogs        AuditLog[]
+  agents           Agent[]
+  requireApprovalForAgents Boolean        @default(false)
   launchDate       DateTime?
   subscription     Subscription?
   usersWithCurrent User[]        @relation("UserCurrentOrg")
+  budgetPolicies   BudgetPolicy[]
+  approvals        Approval[]
+  executionWorkspaces ExecutionWorkspace[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 }
@@ -159,12 +170,15 @@ model Project {
   org              Organization?   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   members          ProjectMember[]
   stories       Story[]
+  workspaces    ExecutionWorkspace[]
   sprints       Sprint[]
   labels        Label[]
   activities    Activity[]
   webhooks      Webhook[]
   recurringStories RecurringStory[]
   savedFilters  SavedFilter[]
+  costEvents    CostEvent[]
+  routines      Routine[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -200,6 +214,8 @@ model Story {
   sprintId           String?
   assigneeId         String?
   parentId           String?
+  agentId            String?
+  identifier         String?
   assignedToAgent    Boolean              @default(false)
   agentNotes         String?
   agentStatus        String?
@@ -217,9 +233,12 @@ model Story {
   deployStatus       String?
   deployUrl          String?
   deployedAt         DateTime?
+  routineId          String?
   project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  routine            Routine?             @relation(fields: [routineId], references: [id], onDelete: SetNull)
   sprint             Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   assignee           User?                @relation("AssignedStories", fields: [assigneeId], references: [id], onDelete: SetNull)
+  agent              Agent?               @relation("AgentStories", fields: [agentId], references: [id], onDelete: SetNull)
   parent             Story?               @relation("StoryParent", fields: [parentId], references: [id], onDelete: SetNull)
   children           Story[]              @relation("StoryParent")
   blockedByDeps      StoryDependency[]    @relation("BlockedStory")
@@ -229,6 +248,8 @@ model Story {
   attachments        Attachment[]
   comments           Comment[]
   activities         Activity[]
+  costEvents         CostEvent[]          @relation("StoryCosts")
+  heartbeatRuns      HeartbeatRun[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
@@ -238,6 +259,8 @@ model Story {
   @@index([parentId])
   @@index([assigneeId])
   @@index([assigneeId, status])
+  @@index([agentId])
+  @@index([routineId])
 }
 
 model AcceptanceCriterion {
@@ -484,4 +507,255 @@ model SavedFilter {
   updatedAt DateTime @updatedAt
 
   @@index([projectId, userId])
+}
+
+// ─── Agent Model ──────────────────────────────────────
+
+model Agent {
+  id               String       @id @default(cuid())
+  orgId            String
+  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name             String
+  role             String       @default("coder")
+  title            String?
+  icon             String?
+  status           String       @default("idle") // idle, running, paused, terminated
+  description      String?      // What this agent does — included in prompt context
+  capabilities     String?
+  adapterType      String       @default("claude") // claude, openai, ollama, http
+  adapterConfig    Json?
+  reportsTo        String?
+  reportingAgent   Agent?       @relation("AgentHierarchy", fields: [reportsTo], references: [id])
+  subordinates     Agent[]      @relation("AgentHierarchy")
+  pauseReason      String?
+  lastHeartbeatAt  DateTime?
+  storiesCompleted Int          @default(0)
+  totalCostCents   Int          @default(0)
+  heartbeatEnabled Boolean      @default(false)
+  heartbeatCron    String?
+  nextHeartbeatAt  DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  assignedStories  Story[]      @relation("AgentStories")
+  costEvents       CostEvent[]
+  heartbeatRuns    HeartbeatRun[]
+  workspaces       ExecutionWorkspace[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([nextHeartbeatAt])
+}
+
+// ─── Cost Event Model ─────────────────────────────────
+
+model CostEvent {
+  id           String   @id @default(cuid())
+  agentId      String?
+  agent        Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  storyId      String?
+  story        Story?   @relation("StoryCosts", fields: [storyId], references: [id], onDelete: SetNull)
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  orgId        String
+  provider     String
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costCents    Int      @default(0)
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([agentId, createdAt])
+  @@index([storyId])
+}
+
+// ─── Budget Policy Model ─────────────────────────────
+
+model BudgetPolicy {
+  id              String           @id @default(cuid())
+  orgId           String
+  org             Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  scope           String           // "org", "agent", "project"
+  scopeId         String?          // agentId or projectId (null for org scope)
+  metric          String           @default("cost_cents")
+  window          String           @default("calendar_month") // "calendar_month", "lifetime"
+  amountCents     Int              // budget limit in cents
+  warnPercent     Int              @default(80)
+  hardStopEnabled Boolean          @default(true)
+  notifyEnabled   Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  incidents       BudgetIncident[]
+
+  @@index([orgId])
+  @@index([orgId, scope, scopeId])
+}
+
+// ─── Budget Incident Model ───────────────────────────
+
+model BudgetIncident {
+  id            String       @id @default(cuid())
+  policyId      String
+  policy        BudgetPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  type          String       // "soft_warning", "hard_stop"
+  currentCents  Int
+  limitCents    Int
+  resolvedAt    DateTime?
+  approvalId    String?      // links to Approval for budget override
+  createdAt     DateTime     @default(now())
+
+  @@index([policyId])
+  @@index([policyId, type])
+}
+
+// ─── Approval Model ──────────────────────────────────
+
+model Approval {
+  id            String            @id @default(cuid())
+  orgId         String
+  org           Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  type          String            // "hire_agent", "budget_override"
+  status        String            @default("pending") // "pending", "approved", "rejected", "revision_requested"
+  payload       Json              // context-specific data
+  requestedById String
+  requestedBy   User              @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  decidedById   String?
+  decidedBy     User?             @relation("ApprovalDecider", fields: [decidedById], references: [id])
+  decidedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  comments      ApprovalComment[]
+
+  @@index([orgId, status])
+  @@index([orgId, type])
+  @@index([requestedById])
+}
+
+// ─── Approval Comment Model ──────────────────────────
+
+model ApprovalComment {
+  id         String   @id @default(cuid())
+  approvalId String
+  approval   Approval @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([approvalId, createdAt])
+}
+
+// ─── HeartbeatRun Model ──────────────────────────────
+
+model HeartbeatRun {
+  id              String    @id @default(cuid())
+  agentId         String
+  agent           Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  storyId         String?
+  story           Story?    @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  source          String    // "on_demand", "scheduled", "issue_assignment"
+  status          String    @default("queued") // queued, running, succeeded, failed, timed_out
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  exitCode        Int?
+  inputTokens     Int?
+  outputTokens    Int?
+  costCents       Int?
+  storiesProcessed Int      @default(0)
+  errorMessage    String?
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  @@index([agentId, createdAt])
+  @@index([agentId, status])
+  @@index([storyId])
+}
+
+// ─── Routine Model ──────────────────────────────────────
+
+model Routine {
+  id                String       @id @default(cuid())
+  projectId         String
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  storyTemplate     Json         // { title, description, type, priority, storyPoints, labels }
+  cronExpression    String
+  timezone          String       @default("UTC")
+  concurrencyPolicy String       @default("skip_if_active") // always_enqueue, skip_if_active, coalesce_if_active
+  webhookEnabled    Boolean      @default(false)
+  webhookSecret     String?
+  webhookAuthType   String       @default("none") // hmac, bearer, none
+  active            Boolean      @default(true)
+  lastTriggeredAt   DateTime?
+  nextTriggerAt     DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  runs              RoutineRun[]
+  stories           Story[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@index([active, nextTriggerAt])
+}
+
+// ─── Routine Run Model ──────────────────────────────────
+
+model RoutineRun {
+  id              String    @id @default(cuid())
+  routineId       String
+  routine         Routine   @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  source          String    // "scheduled", "on_demand", "webhook"
+  status          String    @default("pending") // pending, running, completed, failed, skipped
+  storyId         String?
+  skipReason      String?
+  webhookPayload  Json?
+  createdAt       DateTime  @default(now())
+
+  @@index([routineId, status])
+  @@index([routineId, createdAt])
+}
+
+// ─── Execution Workspace Model ──────────────────────────
+
+model ExecutionWorkspace {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentId     String?
+  agent       Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  workingDir  String
+  branchName  String?
+  cloneUrl    String?
+  status      String       @default("active") // active, closed
+  closedAt    DateTime?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([agentId])
+  @@index([projectId])
+  @@index([orgId, status])
+}
+
+// ─── Read State Model ───────────────────────────────────
+
+model ReadState {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType String   // story, comment, approval
+  entityId   String
+  readAt     DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, entityType, entityId])
+  @@index([userId, entityType])
+  @@index([entityId])
 }

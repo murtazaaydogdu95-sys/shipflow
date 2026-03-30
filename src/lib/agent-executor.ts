@@ -4,6 +4,7 @@ import { homedir } from "os";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { claimAgentSlot } from "@/lib/agent-queue";
+import { getGoalContext } from "@/lib/goals";
 
 export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -22,7 +23,7 @@ const BRANCH_PREFIX: Record<string, string> = {
  * install locations first, then fall back to `which`.
  */
 let _gitBin: string | null = null;
-function getGitBin(): string {
+export function getGitBin(): string {
   if (_gitBin) return _gitBin;
 
   const candidates = [
@@ -149,6 +150,7 @@ export async function ensureBranch(
 interface SpawnOptions {
   storyId: string;
   projectId: string;
+  agentId?: string;
   feedback?: string;
   /** Called when the agent process exits (success or failure). Used to trigger queue processing. */
   onComplete?: (projectId: string) => void;
@@ -157,13 +159,27 @@ interface SpawnOptions {
 /**
  * Core function: spawn a detached Claude process for a story.
  */
-export async function spawnAgent({ storyId, projectId, feedback, onComplete }: SpawnOptions) {
+export async function spawnAgent({ storyId, projectId, agentId, feedback, onComplete }: SpawnOptions) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { agentWorkingDir: true, apiKey: true },
+    select: { agentWorkingDir: true, apiKey: true, orgId: true },
   });
 
-  if (!project?.apiKey || !project.agentWorkingDir) return;
+  if (!project?.apiKey) return;
+
+  // Resolve working directory: prefer ExecutionWorkspace over project.agentWorkingDir
+  let workingDir = project.agentWorkingDir;
+  if (agentId && project.orgId) {
+    const workspace = await prisma.executionWorkspace.findFirst({
+      where: { projectId, agentId, status: "active" },
+      select: { workingDir: true },
+    });
+    if (workspace) {
+      workingDir = workspace.workingDir;
+    }
+  }
+
+  if (!workingDir) return;
 
   const story = await prisma.story.findUnique({
     where: { id: storyId },
@@ -172,9 +188,18 @@ export async function spawnAgent({ storyId, projectId, feedback, onComplete }: S
 
   if (!story) return;
 
+  // Load Agent record if agentId is provided
+  let agentRecord: { id: string; adapterConfig: unknown } | null = null;
+  if (agentId) {
+    agentRecord = await prisma.agent.findUnique({
+      where: { id: agentId },
+      select: { id: true, adapterConfig: true },
+    });
+  }
+
   // Atomically claim an agent slot before doing any work
   // This also moves the story to IN_PROGRESS so the board reflects agent assignment immediately.
-  const claimed = await claimAgentSlot(storyId, projectId);
+  const claimed = await claimAgentSlot(storyId, projectId, agentId);
   if (!claimed) {
     console.log(`[agent-executor] spawnAgent: no agent slot available for ${story.shortId}`);
     return;
@@ -194,7 +219,7 @@ export async function spawnAgent({ storyId, projectId, feedback, onComplete }: S
   // revert the story instead of leaving it stuck in IN_PROGRESS.
   let branchName: string;
   try {
-    branchName = await ensureBranch(story, project.agentWorkingDir);
+    branchName = await ensureBranch(story, workingDir);
   } catch (err) {
     console.error(`[agent-executor] ensureBranch failed for ${story.shortId}:`, err);
     await prisma.story.update({
@@ -260,6 +285,16 @@ export async function spawnAgent({ storyId, projectId, feedback, onComplete }: S
     pastFeedback,
   ];
 
+  // Add goal context if story is linked to a goal
+  try {
+    const goalContext = await getGoalContext(storyId);
+    if (goalContext) {
+      promptParts.push(goalContext);
+    }
+  } catch {
+    // Non-critical — continue without goal context
+  }
+
   if (feedback) {
     promptParts.push(
       `\n⚠️ REVIEW FEEDBACK — The user reviewed your previous work and requested changes:`,
@@ -306,14 +341,14 @@ export async function spawnAgent({ storyId, projectId, feedback, onComplete }: S
     return;
   }
 
-  console.log(`[agent-executor] spawning: ${claudeBin} for ${story.shortId} in ${project.agentWorkingDir}`);
+  console.log(`[agent-executor] spawning: ${claudeBin} for ${story.shortId} in ${workingDir}`);
 
   let child;
   try {
     child = spawn(claudeBin, ["--print", "--dangerously-skip-permissions", "--mcp-config", configPath, "-p", prompt], {
       detached: true,
       stdio: ["ignore", logFd, logFd],
-      cwd: project.agentWorkingDir,
+      cwd: workingDir,
       env: { ...process.env, PATH: fullPath },
     });
   } catch (err) {
@@ -327,9 +362,34 @@ export async function spawnAgent({ storyId, projectId, feedback, onComplete }: S
 
   child.unref();
 
+  // Update Agent status to running and set heartbeat
+  if (agentRecord) {
+    await prisma.agent.update({
+      where: { id: agentRecord.id },
+      data: { status: "running", lastHeartbeatAt: new Date() },
+    }).catch((err) => console.error(`[agent-executor] failed to update agent status:`, err));
+  }
+
   // On exit: if success + REVIEW, auto-start preview; on failure mark FAILED
   child.on("exit", async (code) => {
     console.log(`[agent-executor] agent exited for ${story.shortId} with code ${code}`);
+
+    // Reset Agent status back to idle on any exit
+    if (agentRecord) {
+      try {
+        const updateData: Record<string, unknown> = { status: "idle" };
+        if (code === 0) {
+          updateData.storiesCompleted = { increment: 1 };
+        }
+        await prisma.agent.update({
+          where: { id: agentRecord.id },
+          data: updateData,
+        });
+      } catch (err) {
+        console.error(`[agent-executor] failed to reset agent status:`, err);
+      }
+    }
+
     if (code !== 0) {
       try {
         await prisma.story.update({

@@ -27,12 +27,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
   const status = searchParams.get("status");
   const sprintId = searchParams.get("sprintId");
   const search = searchParams.get("search");
+  const parentIdParam = searchParams.get("parentId");
   const pageParam = searchParams.get("page");
   const limitParam = searchParams.get("limit");
 
   const where: Record<string, unknown> = { projectId };
   if (status) where.status = status;
   if (sprintId) where.sprintId = sprintId;
+  if (parentIdParam === "null") {
+    where.parentId = null;
+  } else if (parentIdParam) {
+    where.parentId = parentIdParam;
+  }
   if (search) {
     where.OR = [
       { title: { contains: search, mode: "insensitive" } },
@@ -51,7 +57,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
     acceptanceCriteria: { orderBy: { position: "asc" as const } },
     assignee: { select: { id: true, name: true, image: true } },
     parent: { select: { id: true, shortId: true, title: true } },
-    children: { select: { id: true, shortId: true, title: true, status: true } },
+    children: { select: { id: true, shortId: true, title: true, status: true, priority: true, type: true } },
     blockedByDeps: { include: { blocker: { select: { id: true, shortId: true, title: true, status: true } } } },
     blockingDeps: { include: { blocked: { select: { id: true, shortId: true, title: true, status: true } } } },
   };
@@ -128,13 +134,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     }
   }
 
-  // Generate shortId with retry on collision (Supabase pooler doesn't support row locking)
-  // Query globally since shortId is unique across all projects
-  const maxResult = await prisma.$queryRaw<[{ max_num: number | null }]>`
-    SELECT MAX(CAST(SUBSTRING("shortId" FROM 4) AS INTEGER)) as max_num
-    FROM "Story"
-  `;
-  let nextNum = (maxResult[0]?.max_num ?? 0) + 1;
+  // Validate parentId if provided
+  if (data.parentId) {
+    const parent = await prisma.story.findFirst({
+      where: { id: data.parentId, projectId },
+      select: { id: true, parentId: true },
+    });
+    if (!parent) {
+      return NextResponse.json(
+        { error: "Parent story not found in this project" },
+        { status: 400 }
+      );
+    }
+    // Enforce max nesting depth of 1: sub-tasks cannot have sub-tasks
+    if (parent.parentId) {
+      return NextResponse.json(
+        { error: "Sub-tasks cannot have sub-tasks (max nesting depth is 1)" },
+        { status: 400 }
+      );
+    }
+  }
 
   // Get next position
   const lastStory = await prisma.story.findFirst({
@@ -143,13 +162,56 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
   });
   const position = (lastStory?.position ?? -1) + 1;
 
+  // Look up project orgId for issue numbering and activity
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { orgId: true },
+  });
+
+  // Generate shortId using org-level atomic counter for sequential issue numbering
+  let shortId: string;
+  let identifier: string | undefined;
+
+  if (project?.orgId) {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const org = await tx.organization.update({
+          where: { id: project.orgId! },
+          data: { issueCounter: { increment: 1 } },
+          select: { issueCounter: true, issuePrefix: true, name: true },
+        });
+        const prefix = org.issuePrefix || org.name.substring(0, 2).toUpperCase();
+        const id = `${prefix}-${String(org.issueCounter).padStart(3, "0")}`;
+        return id;
+      }, { isolationLevel: "Serializable" });
+      shortId = result;
+      identifier = result;
+    } catch {
+      // Fallback: use global max query if transaction fails
+      const maxResult = await prisma.$queryRaw<[{ max_num: number | null }]>`
+        SELECT MAX(CAST(SUBSTRING("shortId" FROM '[0-9]+') AS INTEGER)) as max_num
+        FROM "Story"
+      `;
+      const nextNum = (maxResult[0]?.max_num ?? 0) + 1;
+      shortId = `CP-${String(nextNum).padStart(3, "0")}`;
+    }
+  } else {
+    // No org: fallback to global counter
+    const maxResult = await prisma.$queryRaw<[{ max_num: number | null }]>`
+      SELECT MAX(CAST(SUBSTRING("shortId" FROM '[0-9]+') AS INTEGER)) as max_num
+      FROM "Story"
+    `;
+    const nextNum = (maxResult[0]?.max_num ?? 0) + 1;
+    shortId = `CP-${String(nextNum).padStart(3, "0")}`;
+  }
+
   let story;
   for (let attempt = 0; attempt < 10; attempt++) {
-    const shortId = `CP-${String(nextNum).padStart(3, "0")}`;
     try {
       story = await prisma.story.create({
         data: {
-          shortId,
+          shortId: attempt === 0 ? shortId : `${shortId}-${attempt}`,
+          identifier,
           title: data.title,
           description: data.description,
           rawInput: data.rawInput,
@@ -186,7 +248,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     } catch (e: unknown) {
       const isPrismaUniqueError = typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002";
       if (isPrismaUniqueError && attempt < 9) {
-        nextNum++; // try next number
         continue;
       }
       throw e;
@@ -196,12 +257,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
   if (!story) {
     return NextResponse.json({ error: "Failed to create story" }, { status: 500 });
   }
-
-  // Look up project orgId for activity
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { orgId: true },
-  });
 
   // Create activity
   await prisma.activity.create({

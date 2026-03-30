@@ -7,6 +7,8 @@ export type Permission =
   | "org:billing"
   | "org:settings"
   | "org:members"
+  | "org:budget"
+  | "org:approvals"
   | "project:create"
   | "project:delete"
   | "project:settings"
@@ -22,6 +24,8 @@ const ROLE_PERMISSIONS: Record<OrgRole, Set<Permission>> = {
     "org:billing",
     "org:settings",
     "org:members",
+    "org:budget",
+    "org:approvals",
     "project:create",
     "project:delete",
     "project:settings",
@@ -34,6 +38,8 @@ const ROLE_PERMISSIONS: Record<OrgRole, Set<Permission>> = {
   ADMIN: new Set([
     "org:settings",
     "org:members",
+    "org:budget",
+    "org:approvals",
     "project:create",
     "project:delete",
     "project:settings",

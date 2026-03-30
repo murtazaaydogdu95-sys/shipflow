@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Copy, Bot, Save, Loader2, Ban, Paperclip, ScrollText, GitCompare, MessageSquare } from "lucide-react";
+import { Copy, Bot, Save, Loader2, Ban, Paperclip, ScrollText, GitCompare, MessageSquare, Target } from "lucide-react";
 import { toast } from "sonner";
 import type { StoryWithRelations } from "@/types";
 import { STORY_TYPES } from "@/types";
+import { useSession } from "next-auth/react";
 import { useSoloMode } from "@/hooks/use-solo-mode";
 import { DiffViewer } from "@/components/stories/diff-viewer";
 import { AIReview } from "@/components/stories/ai-review";
@@ -22,6 +23,8 @@ import { StoryDependencies } from "@/components/stories/story-dependencies";
 import { StoryAttachments } from "@/components/stories/story-attachments";
 import { StoryAgentLogs } from "@/components/stories/story-agent-logs";
 import { StoryReviewPanel } from "@/components/stories/story-review-panel";
+import { StoryCostSummary } from "@/components/stories/story-cost-summary";
+import { SubTaskList } from "@/components/stories/sub-task-list";
 
 type MemberOption = { id: string; name: string | null; image: string | null };
 
@@ -53,12 +56,20 @@ export function StoryDetailModal({
   const [deploying, setDeploying] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
   const [hasViewedDiff, setHasViewedDiff] = useState(false);
+  const [editGoalId, setEditGoalId] = useState<string>("");
 
   const { memberCount } = useSoloMode();
+  const { data: session } = useSession();
   const isOpen = !!story;
 
   const { data: members } = useSWR<MemberOption[]>(
     isOpen ? `/api/projects/${projectId}/members` : null,
+    fetcher
+  );
+
+  type GoalOption = { id: string; title: string; level: string };
+  const { data: goals } = useSWR<GoalOption[]>(
+    isOpen && session?.user?.orgId ? `/api/orgs/${session.user.orgId}/goals` : null,
     fetcher
   );
 
@@ -75,6 +86,12 @@ export function StoryDetailModal({
 
   const { data: attachments, mutate: mutateAttachments } = useSWR(
     isOpen && story && activeTab === "files" ? `/api/projects/${projectId}/stories/${story.id}/attachments` : null,
+    fetcher
+  );
+
+  // Fetch full story data (with children) for sub-task display
+  const { data: fullStory, mutate: mutateFullStory } = useSWR<StoryWithRelations>(
+    isOpen && story ? `/api/projects/${projectId}/stories/${story.id}` : null,
     fetcher
   );
 
@@ -108,6 +125,7 @@ export function StoryDetailModal({
     setEditType((story as StoryWithRelations & { type?: string }).type || "feature");
     setEditPoints(story.storyPoints ? String(story.storyPoints) : "");
     setEditAssigneeId(story.assigneeId || "");
+    setEditGoalId((story as StoryWithRelations & { goalId?: string | null }).goalId || "");
     setActiveTab("details");
     setHasViewedDiff(false);
   }
@@ -126,6 +144,7 @@ export function StoryDetailModal({
           type: editType,
           storyPoints: editPoints ? Number(editPoints) : null,
           assigneeId: editAssigneeId || null,
+          goalId: editGoalId || null,
         }),
       });
       if (!res.ok) throw new Error();
@@ -352,6 +371,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
     setEditType("");
     setEditPoints("");
     setEditAssigneeId("");
+    setEditGoalId("");
     setCommentText("");
     setHasViewedDiff(false);
     onClose();
@@ -517,6 +537,23 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                   />
                 </div>
 
+                {/* Sub-tasks section */}
+                {story && !story.parentId && (
+                  <SubTaskList
+                    projectId={projectId}
+                    parentStoryId={story.id}
+                    children={(fullStory?.children ?? story.children ?? []) as { id: string; shortId: string; title: string; status: string; priority: string; type: string }[]}
+                    onSubTaskClick={(childId) => {
+                      // Close current modal and open the child story
+                      // For now, we navigate - the parent component handles this
+                      window.location.href = `/projects/${projectId}?story=${childId}`;
+                    }}
+                    onSubTaskCreated={() => {
+                      mutateFullStory();
+                    }}
+                  />
+                )}
+
                 {story.userStory && (
                   <div>
                     <label className="text-sm font-medium">User Story</label>
@@ -600,6 +637,31 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                   </div>
                 )}
 
+                {goals && goals.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium flex items-center gap-1">
+                      <Target className="h-3.5 w-3.5" />
+                      Goal
+                    </label>
+                    <Select
+                      value={editGoalId || "none"}
+                      onValueChange={(v) => setEditGoalId(v === "none" ? "" : v)}
+                    >
+                      <SelectTrigger className="mt-1" data-testid="story-goal-select">
+                        <SelectValue placeholder="No goal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No goal</SelectItem>
+                        {goals.map((g) => (
+                          <SelectItem key={g.id} value={g.id}>
+                            [{g.level}] {g.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="flex gap-1 flex-wrap">
                   {story.labels.map(({ label }) => (
                     <Badge
@@ -622,6 +684,8 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                     Save Changes
                   </Button>
                 </div>
+
+                <StoryCostSummary projectId={projectId} storyId={story.id} />
               </TabsContent>
 
               <TabsContent value="criteria" className="space-y-3 mt-4">

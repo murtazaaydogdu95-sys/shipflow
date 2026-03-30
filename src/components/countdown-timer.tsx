@@ -8,7 +8,7 @@ function useHasMounted() {
   return useSyncExternalStore(emptySubscribe, () => true, () => false);
 }
 
-const DEFAULT_LAUNCH_DATE = new Date("2026-03-28T12:00:00");
+const DEFAULT_LAUNCH_DATE = new Date("2026-04-02T14:00:00Z");
 
 interface TimeLeft {
   days: number;

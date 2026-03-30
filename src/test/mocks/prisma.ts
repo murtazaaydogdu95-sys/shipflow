@@ -33,6 +33,10 @@ export function createMockPrisma() {
     webhook: modelMock(),
     webhookDelivery: modelMock(),
     auditLog: modelMock(),
+    agent: modelMock(),
+    routine: modelMock(),
+    routineRun: modelMock(),
+    heartbeatRun: modelMock(),
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };

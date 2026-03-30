@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const DEFAULT_LAUNCH_DATE = "2026-03-28T12:00:00Z";
+const DEFAULT_LAUNCH_DATE = "2026-04-02T14:00:00Z";
 
 export async function GET() {
   try {

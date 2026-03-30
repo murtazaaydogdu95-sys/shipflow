@@ -9,6 +9,8 @@ import type {
   StoryLabel,
   ProjectMember,
   Comment,
+  Agent,
+  CostEvent,
 } from "@prisma/client";
 
 export type StoryWithRelations = Story & {
@@ -17,7 +19,7 @@ export type StoryWithRelations = Story & {
   assignee?: Pick<User, "id" | "name" | "image"> | null;
   comments?: (Comment & { user: Pick<User, "id" | "name" | "image"> })[];
   parent?: Pick<Story, "id" | "shortId" | "title"> | null;
-  children?: Pick<Story, "id" | "shortId" | "title" | "status">[];
+  children?: Pick<Story, "id" | "shortId" | "title" | "status" | "priority" | "type">[];
   blockedByDeps?: { blocker: Pick<Story, "id" | "shortId" | "title" | "status"> }[];
   blockingDeps?: { blocked: Pick<Story, "id" | "shortId" | "title" | "status"> }[];
   attachments?: { id: string; filename: string; url: string; size: number; mimeType: string; createdAt: Date }[];
@@ -90,6 +92,33 @@ export interface BurndownSummary {
   daysElapsed: number;
   daysRemaining: number;
 }
+
+// ─── Agent Types ──────────────────────────────────────
+
+export type AgentWithStats = Agent & {
+  _count: { assignedStories: number; costEvents: number };
+};
+
+export type AgentDetail = Agent & {
+  assignedStories: Pick<Story, "id" | "shortId" | "title" | "status">[];
+  subordinates: Pick<Agent, "id" | "name" | "role" | "status">[];
+  reportingAgent: Pick<Agent, "id" | "name" | "role"> | null;
+};
+
+export const AGENT_ROLES = ["coder", "reviewer", "qa", "devops", "designer"] as const;
+export type AgentRole = (typeof AGENT_ROLES)[number];
+
+export const AGENT_STATUSES = ["idle", "running", "paused", "terminated"] as const;
+export type AgentStatus = (typeof AGENT_STATUSES)[number];
+
+export const ADAPTER_TYPES = ["claude", "openai", "ollama"] as const;
+export type AdapterType = (typeof ADAPTER_TYPES)[number];
+
+// ─── Cost Event Types ─────────────────────────────────
+
+export type { CostEvent };
+
+// ─── Burndown Types ───────────────────────────────────
 
 export interface BurndownResponse {
   sprint: {

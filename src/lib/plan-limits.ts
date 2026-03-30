@@ -25,6 +25,28 @@ async function resolvePlan(orgId?: string | null, userId?: string): Promise<keyo
   return "FREE";
 }
 
+/**
+ * Check if the org is allowed to create more agents based on plan limits.
+ * Non-terminated agents are counted against the plan's maxConcurrentAgents.
+ */
+export async function checkAgentLimit(orgId: string): Promise<LimitResult> {
+  const plan = await resolvePlan(orgId);
+  const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.FREE;
+
+  const count = await prisma.agent.count({
+    where: { orgId, status: { not: "terminated" } },
+  });
+
+  if (count >= limits.maxConcurrentAgents) {
+    return {
+      allowed: false,
+      message: `Your ${plan} plan allows up to ${limits.maxConcurrentAgents} agents. Upgrade for more.`,
+    };
+  }
+
+  return { allowed: true };
+}
+
 export async function checkProjectLimit(userId: string, orgId?: string | null): Promise<LimitResult> {
   const plan = await resolvePlan(orgId, userId);
   const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.FREE;

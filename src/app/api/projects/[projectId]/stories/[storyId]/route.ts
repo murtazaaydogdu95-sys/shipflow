@@ -35,7 +35,7 @@ export async function GET(
       acceptanceCriteria: { orderBy: { position: "asc" } },
       assignee: { select: { id: true, name: true, image: true } },
       parent: { select: { id: true, shortId: true, title: true } },
-      children: { select: { id: true, shortId: true, title: true, status: true } },
+      children: { select: { id: true, shortId: true, title: true, status: true, priority: true, type: true, storyPoints: true, assigneeId: true } },
       blockedByDeps: { include: { blocker: { select: { id: true, shortId: true, title: true, status: true } } } },
       blockingDeps: { include: { blocked: { select: { id: true, shortId: true, title: true, status: true } } } },
       attachments: { orderBy: { createdAt: "desc" } },
@@ -75,6 +75,28 @@ export async function PATCH(
 
   const existing = await prisma.story.findFirst({ where: { id: storyId, projectId } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Validate parentId if provided
+  if (data.parentId !== undefined && data.parentId !== null) {
+    if (data.parentId === storyId) {
+      return NextResponse.json({ error: "A story cannot be its own parent" }, { status: 400 });
+    }
+    const parent = await prisma.story.findFirst({
+      where: { id: data.parentId, projectId },
+      select: { id: true, parentId: true },
+    });
+    if (!parent) {
+      return NextResponse.json({ error: "Parent story not found in this project" }, { status: 400 });
+    }
+    if (parent.parentId) {
+      return NextResponse.json({ error: "Sub-tasks cannot have sub-tasks (max nesting depth is 1)" }, { status: 400 });
+    }
+    // Prevent making a parent story into a sub-task if it has children
+    const childCount = await prisma.story.count({ where: { parentId: storyId } });
+    if (childCount > 0) {
+      return NextResponse.json({ error: "Cannot set parent on a story that has children" }, { status: 400 });
+    }
+  }
 
   // Validate status transition
   if (data.status && data.status !== existing.status) {

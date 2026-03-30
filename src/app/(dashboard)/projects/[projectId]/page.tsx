@@ -38,7 +38,7 @@ export default async function ProjectBoardPage({
       labels: { include: { label: true } },
       acceptanceCriteria: { orderBy: { position: "asc" } },
       parent: { select: { id: true, shortId: true, title: true } },
-      children: { select: { id: true, shortId: true, title: true, status: true } },
+      children: { select: { id: true, shortId: true, title: true, status: true, priority: true, type: true } },
       blockedByDeps: { include: { blocker: { select: { id: true, shortId: true, title: true, status: true } } } },
       blockingDeps: { include: { blocked: { select: { id: true, shortId: true, title: true, status: true } } } },
     },

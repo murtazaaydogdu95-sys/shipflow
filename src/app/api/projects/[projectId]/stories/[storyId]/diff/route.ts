@@ -37,17 +37,41 @@ export async function GET(
     return NextResponse.json({ error: "No working directory configured" }, { status: 400 });
   }
 
+  const gitBin = getGitBin();
+  const gitOpts = {
+    cwd: project.agentWorkingDir,
+    encoding: "utf-8" as const,
+    timeout: 15000,
+    maxBuffer: 5 * 1024 * 1024,
+  };
+
   try {
-    const diff = execFileSync(
-      "git",
+    // Try branch-vs-main diff first
+    let diff = execFileSync(
+      gitBin,
       ["diff", `main...${story.branchName}`],
-      {
-        cwd: project.agentWorkingDir,
-        encoding: "utf-8",
-        timeout: 15000,
-        maxBuffer: 5 * 1024 * 1024,
-      }
+      gitOpts
     );
+
+    // If diff is empty, the branch may already be merged into main.
+    // Fall back to showing the commit diff using commitHash or the branch tip.
+    if (!diff.trim()) {
+      const storyWithCommit = await prisma.story.findUnique({
+        where: { id: storyId },
+        select: { commitHash: true },
+      });
+      if (storyWithCommit?.commitHash) {
+        const commitRef = storyWithCommit.commitHash;
+        const COMMIT_RE = /^[a-f0-9]{4,40}$/;
+        if (COMMIT_RE.test(commitRef)) {
+          diff = execFileSync(
+            gitBin,
+            ["diff", `${commitRef}~1`, commitRef],
+            gitOpts
+          );
+        }
+      }
+    }
 
     return NextResponse.json({ diff });
   } catch (err) {

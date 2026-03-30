@@ -47,5 +47,34 @@ export async function POST(req: Request) {
     console.log(`[agent-cleanup] Marked ${story.shortId} as FAILED (timeout)`);
   }
 
-  return NextResponse.json({ success: true, cleaned: stuckStories.length });
+  // Also mark stuck HeartbeatRun records as timed_out
+  const heartbeatCutoff = new Date(Date.now() - AGENT_TIMEOUT_MS);
+  const stuckHeartbeats = await prisma.heartbeatRun.findMany({
+    where: {
+      status: "running",
+      startedAt: { lt: heartbeatCutoff },
+    },
+    select: { id: true, agentId: true },
+  });
+
+  for (const hb of stuckHeartbeats) {
+    await prisma.heartbeatRun.update({
+      where: { id: hb.id },
+      data: { status: "timed_out", finishedAt: new Date() },
+    });
+
+    // Reset agent to idle if it's still marked as running
+    await prisma.agent.updateMany({
+      where: { id: hb.agentId, status: "running" },
+      data: { status: "idle" },
+    });
+
+    console.log(`[agent-cleanup] Marked heartbeat run ${hb.id} as timed_out`);
+  }
+
+  return NextResponse.json({
+    success: true,
+    cleaned: stuckStories.length,
+    heartbeatsCleaned: stuckHeartbeats.length,
+  });
 }

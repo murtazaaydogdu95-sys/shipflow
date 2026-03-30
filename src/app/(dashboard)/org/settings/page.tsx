@@ -41,6 +41,11 @@ export default function OrgSettingsPage() {
   const [savingLaunchDate, setSavingLaunchDate] = useState(false);
   const [launchDateError, setLaunchDateError] = useState("");
   const [launchDateSuccess, setLaunchDateSuccess] = useState("");
+  const [issuePrefix, setIssuePrefix] = useState("");
+  const [issuePrefixInitialized, setIssuePrefixInitialized] = useState(false);
+  const [savingIssuePrefix, setSavingIssuePrefix] = useState(false);
+  const [issuePrefixError, setIssuePrefixError] = useState("");
+  const [issuePrefixSuccess, setIssuePrefixSuccess] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -51,12 +56,55 @@ export default function OrgSettingsPage() {
     setName(org.name);
   }
 
+  // Initialize issue prefix when org loads
+  if (org && !issuePrefixInitialized) {
+    if (org.issuePrefix) {
+      setIssuePrefix(org.issuePrefix);
+    }
+    setIssuePrefixInitialized(true);
+  }
+
   // Initialize launch date when org loads
   if (org && !launchDateInitialized) {
     if (org.launchDate) {
       setLaunchDate(toLocalDatetimeString(org.launchDate));
     }
     setLaunchDateInitialized(true);
+  }
+
+  async function handleSaveIssuePrefix() {
+    if (!orgId) return;
+    setIssuePrefixError("");
+    setIssuePrefixSuccess("");
+
+    const trimmed = issuePrefix.trim().toUpperCase();
+    if (!trimmed) {
+      setIssuePrefixError("Issue prefix is required");
+      return;
+    }
+    if (!/^[A-Z0-9]{2,4}$/.test(trimmed)) {
+      setIssuePrefixError("Prefix must be 2-4 uppercase alphanumeric characters");
+      return;
+    }
+
+    setSavingIssuePrefix(true);
+    try {
+      const res = await fetch(`/api/orgs/${orgId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ issuePrefix: trimmed }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setIssuePrefixError(data.error || "Failed to save issue prefix");
+        return;
+      }
+      setIssuePrefix(trimmed);
+      await mutate();
+      setIssuePrefixSuccess("Issue prefix saved successfully.");
+    } finally {
+      setSavingIssuePrefix(false);
+    }
   }
 
   async function handleSaveLaunchDate() {
@@ -175,6 +223,47 @@ export default function OrgSettingsPage() {
           </Button>
         )}
       </div>
+
+      {isOwner && (
+        <div className="border-t pt-8 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Issue Numbering</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Set a prefix for story identifiers (e.g., CP for CP-001, CP-002).
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="issue-prefix">Issue Prefix</Label>
+            <Input
+              id="issue-prefix"
+              value={issuePrefix}
+              onChange={(e) => {
+                setIssuePrefix(e.target.value.toUpperCase());
+                setIssuePrefixError("");
+                setIssuePrefixSuccess("");
+              }}
+              placeholder="e.g. CP"
+              maxLength={4}
+              data-testid="org-issue-prefix"
+            />
+            {issuePrefixError && (
+              <p className="text-sm text-destructive">{issuePrefixError}</p>
+            )}
+            {issuePrefixSuccess && (
+              <p className="text-sm text-green-600 dark:text-green-400">{issuePrefixSuccess}</p>
+            )}
+          </div>
+
+          <Button
+            onClick={handleSaveIssuePrefix}
+            disabled={savingIssuePrefix || !issuePrefix.trim()}
+            data-testid="issue-prefix-save-btn"
+          >
+            {savingIssuePrefix ? "Saving..." : "Save Issue Prefix"}
+          </Button>
+        </div>
+      )}
 
       {isOwner && (
         <div className="border-t pt-8 space-y-4">

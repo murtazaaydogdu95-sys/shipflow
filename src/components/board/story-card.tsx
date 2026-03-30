@@ -117,9 +117,15 @@ export const StoryCard = React.memo(function StoryCard({ story, onClick, onDelet
               </span>
             )}
             {childCount > 0 && (
-              <span className="inline-flex items-center gap-0.5" title={`Epic with ${childCount} sub-stories`}>
+              <span
+                className="inline-flex items-center gap-0.5"
+                title={`${story.children?.filter((c) => c.status === "DONE").length ?? 0}/${childCount} sub-tasks done`}
+                data-testid="subtask-count"
+              >
                 <Link2 className="h-3.5 w-3.5 text-indigo-500" />
-                <span className="text-[9px] font-medium text-indigo-500">{childCount}</span>
+                <span className="text-[9px] font-medium text-indigo-500">
+                  {story.children?.filter((c) => c.status === "DONE").length ?? 0}/{childCount}
+                </span>
               </span>
             )}
           </div>
@@ -191,6 +197,7 @@ export const StoryCard = React.memo(function StoryCard({ story, onClick, onDelet
     (prev.story.acceptanceCriteria?.length ?? 0) === (next.story.acceptanceCriteria?.length ?? 0) &&
     (prev.story.acceptanceCriteria?.filter(ac => ac.completed).length ?? 0) === (next.story.acceptanceCriteria?.filter(ac => ac.completed).length ?? 0) &&
     (prev.story.children?.length ?? 0) === (next.story.children?.length ?? 0) &&
+    (prev.story.children?.filter(c => c.status === "DONE").length ?? 0) === (next.story.children?.filter(c => c.status === "DONE").length ?? 0) &&
     (prev.story.blockedByDeps?.length ?? 0) === (next.story.blockedByDeps?.length ?? 0) &&
     prev.isDragging === next.isDragging &&
     prev.isSelected === next.isSelected &&

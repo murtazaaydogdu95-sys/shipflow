@@ -48,9 +48,16 @@ export async function PATCH(
   if (!parsed.ok) return parsed.response;
   const body = parsed.data as Record<string, unknown>;
 
-  const { name, launchDate } = body;
+  const { name, launchDate, issuePrefix } = body;
   if (name !== undefined && (typeof name !== "string" || name.trim().length < 2)) {
     return NextResponse.json({ error: "Organization name must be at least 2 characters" }, { status: 400 });
+  }
+
+  // Validate issuePrefix: 2-4 uppercase alphanumeric chars
+  if (issuePrefix !== undefined) {
+    if (typeof issuePrefix !== "string" || !/^[A-Z0-9]{2,4}$/.test(issuePrefix)) {
+      return NextResponse.json({ error: "Issue prefix must be 2-4 uppercase alphanumeric characters" }, { status: 400 });
+    }
   }
 
   // Validate launchDate format if provided
@@ -77,6 +84,7 @@ export async function PATCH(
     where: { id: orgId },
     data: {
       ...(name ? { name: name.trim() } : {}),
+      ...(issuePrefix !== undefined ? { issuePrefix: issuePrefix as string } : {}),
       ...(parsedLaunchDate !== undefined ? { launchDate: parsedLaunchDate } : {}),
     },
   });

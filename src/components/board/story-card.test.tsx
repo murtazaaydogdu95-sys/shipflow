@@ -108,7 +108,7 @@ describe("StoryCard", () => {
     expect(screen.queryByText("Blocked")).not.toBeInTheDocument();
   });
 
-  it("shows epic child count when story has children", () => {
+  it("shows sub-task done/total count when story has children", () => {
     const story = makeStory({
       children: [
         { id: "c1", shortId: "CP-010", title: "Child 1", status: "TODO" },
@@ -116,7 +116,8 @@ describe("StoryCard", () => {
       ],
     });
     render(<StoryCard story={story} />);
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByTestId("subtask-count")).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
   });
 
   it("shows acceptance criteria progress bar", () => {
