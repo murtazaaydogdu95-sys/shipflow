@@ -16,6 +16,8 @@ spec:
       labels:
         {{- include "codepylot.selectorLabels" . | nindent 8 }}
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
