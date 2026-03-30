@@ -11,9 +11,8 @@ service:
 
 ingress:
   enabled: true
-  className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+  className: traefik  # k3s default; change to "nginx" if using nginx-ingress
+  annotations: {}
   hosts:
     - host: app.codepylot.dev
       paths:
@@ -33,7 +32,7 @@ postgresql:
     database: codepylot
   storage:
     size: 10Gi
-    storageClass: ""  # Use default
+    storageClass: "local-path"  # k3s default storage class
 
 ollama:
   enabled: false  # Optional local AI
@@ -80,7 +79,7 @@ cronjobs:
     schedule: "0 8 * * *"
 
 backup:
-  enabled: true
+  enabled: false  # Enable after verifying storage works
   schedule: "0 2 * * *"
   retention:
     days: 7
@@ -90,4 +89,4 @@ backup:
 persistence:
   repos:
     size: 5Gi
-    storageClass: ""
+    storageClass: "local-path"
