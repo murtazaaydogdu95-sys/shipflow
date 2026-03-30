@@ -36,7 +36,7 @@ export function StoryDependencies({
 }: StoryDependenciesProps) {
   return (
     <>
-      <div>
+      <div data-testid="deps-list">
         <label className="text-sm font-medium">Blocked By</label>
         {depsData?.blockedBy && depsData.blockedBy.length > 0 ? (
           <div className="mt-2 space-y-1">
@@ -72,7 +72,7 @@ export function StoryDependencies({
           </div>
         </div>
       )}
-      <div>
+      <div data-testid="deps-add-btn">
         <label className="text-sm font-medium">Add Blocker</label>
         <DependencySearch projectId={projectId} storyId={storyId} onAdd={onAddDependency} />
       </div>

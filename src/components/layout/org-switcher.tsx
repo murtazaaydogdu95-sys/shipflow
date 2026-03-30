@@ -84,7 +84,7 @@ export function OrgSwitcher() {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2 max-w-[200px]">
+          <Button variant="ghost" size="sm" className="gap-2 max-w-[200px]" data-testid="org-switcher">
             <Building2 className="h-4 w-4 shrink-0" />
             <span className="truncate text-sm">{currentOrg?.name ?? "Select org"}</span>
             <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
@@ -96,6 +96,7 @@ export function OrgSwitcher() {
               key={org.id}
               onClick={() => handleSwitch(org.id)}
               className="gap-2"
+              data-testid={`org-switcher-item-${org.slug}`}
             >
               <Building2 className="h-4 w-4 shrink-0" />
               <span className="truncate flex-1">{org.name}</span>

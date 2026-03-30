@@ -53,6 +53,12 @@ export default async function ProjectBoardPage({
 
   const members = project.members.map((m) => m.user);
 
+  const sprints = await prisma.sprint.findMany({
+    where: { projectId },
+    select: { id: true, name: true, status: true },
+    orderBy: { createdAt: "desc" },
+  });
+
   return (
     <ProjectView
       initialColumns={columns}
@@ -61,6 +67,7 @@ export default async function ProjectBoardPage({
       labels={project.labels}
       members={members}
       techStack={project.techStack}
+      sprints={sprints}
     />
   );
 }

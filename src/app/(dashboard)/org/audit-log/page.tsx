@@ -122,7 +122,7 @@ export default function AuditLogPage() {
           ) : logs.length === 0 ? (
             <p className="text-sm text-muted-foreground">No audit log entries found.</p>
           ) : (
-            <div className="space-y-0 divide-y">
+            <div className="space-y-0 divide-y" data-testid="audit-log-list">
               {logs.map((log) => (
                 <div key={log.id} className="flex items-start gap-4 py-3">
                   <div className="flex-1 min-w-0">

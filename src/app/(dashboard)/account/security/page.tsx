@@ -97,7 +97,7 @@ export default function SecurityPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {step === "idle" && (
-            <Button onClick={handleSetup} disabled={loading}>
+            <Button onClick={handleSetup} disabled={loading} data-testid="security-2fa-enable">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Set Up 2FA
             </Button>
@@ -106,11 +106,11 @@ export default function SecurityPage() {
           {step === "setup" && (
             <div className="space-y-4">
               <div className="flex justify-center">
-                <img src={qrCode} alt="QR Code" className="rounded-lg border" />
+                <img src={qrCode} alt="QR Code" className="rounded-lg border" data-testid="2fa-qr-code" />
               </div>
               <div>
                 <Label>Manual entry key</Label>
-                <code className="block mt-1 text-sm bg-muted p-2 rounded font-mono break-all">
+                <code className="block mt-1 text-sm bg-muted p-2 rounded font-mono break-all" data-testid="2fa-secret">
                   {secret}
                 </code>
               </div>
@@ -161,7 +161,7 @@ export default function SecurityPage() {
                     className="font-mono"
                     maxLength={6}
                   />
-                  <Button variant="destructive" onClick={handleDisable} disabled={loading || disableCode.length < 6}>
+                  <Button variant="destructive" onClick={handleDisable} disabled={loading || disableCode.length < 6} data-testid="security-2fa-disable">
                     Disable
                   </Button>
                 </div>

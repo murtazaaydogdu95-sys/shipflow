@@ -91,6 +91,7 @@ export default function NotificationPreferencesPage() {
             <Switch
               checked={prefs.email}
               onCheckedChange={(checked) => setPrefs({ ...prefs, email: checked })}
+              data-testid="notif-email-toggle"
             />
           </div>
           {prefs.email && (
@@ -113,7 +114,7 @@ export default function NotificationPreferencesPage() {
               </Select>
             </div>
           )}
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving} data-testid="notif-save">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Preferences
           </Button>

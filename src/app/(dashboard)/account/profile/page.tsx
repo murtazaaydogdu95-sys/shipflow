@@ -142,14 +142,15 @@ export default function ProfilePage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1"
+              data-testid="profile-name"
             />
           </div>
           <div>
             <Label>Email</Label>
-            <Input value={profile.email || ""} readOnly disabled className="mt-1" />
+            <Input value={profile.email || ""} readOnly disabled className="mt-1" data-testid="profile-email" />
             <p className="text-xs text-muted-foreground mt-1">Email is managed by your OAuth provider</p>
           </div>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving} data-testid="profile-save">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Changes
           </Button>

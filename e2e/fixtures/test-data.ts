@@ -130,6 +130,43 @@ export const TEST_LABELS = {
   urgent: { id: "label-urgent", name: "urgent", color: "#ef4444" },
 } as const;
 
+export const TEST_ADMIN_USER = {
+  id: "test-admin-id",
+  name: "Admin User",
+  email: "admin@codepylot.dev",
+  password: "adminpassword123",
+  orgId: "test-org-id",
+} as const;
+
+export const TEST_MEMBER_USER = {
+  id: "test-member-id",
+  name: "Member User",
+  email: "member@codepylot.dev",
+  password: "memberpassword123",
+  orgId: "test-org-id",
+} as const;
+
+export const TEST_NEW_USER = {
+  id: "test-new-user-id",
+  name: "New User",
+  email: "newuser@codepylot.dev",
+  password: "newuserpassword123",
+} as const;
+
+export const TEST_ORG_2 = {
+  id: "test-org-2-id",
+  name: "Second Workspace",
+  slug: "second-workspace",
+  plan: "FREE",
+} as const;
+
+export const TEST_PUBLIC_PROJECT = {
+  id: "test-public-project-id",
+  name: "Public Project",
+  slug: "public-project",
+  description: "A publicly visible project",
+} as const;
+
 /**
  * Creates a mock story matching the StoryWithRelations shape returned by the API.
  * Includes all required Prisma relation fields as empty arrays/null.

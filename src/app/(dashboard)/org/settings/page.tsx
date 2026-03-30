@@ -155,6 +155,7 @@ export default function OrgSettingsPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={!isOwner}
+            data-testid="org-name-input"
           />
         </div>
 
@@ -169,7 +170,7 @@ export default function OrgSettingsPage() {
         </div>
 
         {isOwner && (
-          <Button onClick={handleSave} disabled={saving || !name.trim()}>
+          <Button onClick={handleSave} disabled={saving || !name.trim()} data-testid="org-save-btn">
             {saving ? "Saving..." : "Save Changes"}
           </Button>
         )}
@@ -220,7 +221,7 @@ export default function OrgSettingsPage() {
           <h2 className="text-lg font-semibold text-destructive">Danger Zone</h2>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" disabled={deleting}>
+              <Button variant="destructive" disabled={deleting} data-testid="org-delete-btn">
                 Delete Organization
               </Button>
             </AlertDialogTrigger>

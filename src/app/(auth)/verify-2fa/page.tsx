@@ -55,9 +55,10 @@ export default function Verify2FAPage() {
               maxLength={8}
               autoFocus
               required
+              data-testid="2fa-code-input"
             />
             {error && <p className="text-sm text-destructive text-center">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading} data-testid="2fa-verify-btn">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Verify
             </Button>

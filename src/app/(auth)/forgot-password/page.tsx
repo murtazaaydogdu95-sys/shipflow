@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {sent ? (
-            <p className="text-sm text-muted-foreground text-center">
+            <p className="text-sm text-muted-foreground text-center" data-testid="forgot-success">
               If an account exists with that email, we&apos;ve sent a reset link. Check your inbox.
             </p>
           ) : (
@@ -54,8 +54,9 @@ export default function ForgotPasswordPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                data-testid="forgot-email"
               />
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading} data-testid="forgot-submit">
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Send Reset Link
               </Button>
@@ -64,6 +65,7 @@ export default function ForgotPasswordPage() {
           <Link
             href="/login"
             className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            data-testid="forgot-back-to-login"
           >
             <ArrowLeft className="h-3 w-3" />
             Back to login

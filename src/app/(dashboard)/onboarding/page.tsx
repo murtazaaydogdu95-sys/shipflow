@@ -101,9 +101,10 @@ export default function OnboardingPage() {
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 placeholder={`${userName}'s Workspace`}
+                data-testid="onboarding-workspace-name"
               />
             </div>
-            <Button onClick={handleOrgStep} className="w-full" disabled={loading}>
+            <Button onClick={handleOrgStep} className="w-full" disabled={loading} data-testid="onboarding-continue">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Continue
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -128,7 +129,7 @@ export default function OnboardingPage() {
               />
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+              <Button variant="outline" onClick={() => setStep(2)} className="flex-1" data-testid="onboarding-skip">
                 Skip
               </Button>
               <Button onClick={handleProjectStep} className="flex-1" disabled={loading}>
@@ -152,7 +153,7 @@ export default function OnboardingPage() {
                 Your workspace is ready. Start capturing ideas and let AI turn them into code.
               </p>
             </div>
-            <Button onClick={handleComplete} className="w-full" disabled={loading}>
+            <Button onClick={handleComplete} className="w-full" disabled={loading} data-testid="onboarding-complete">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Go to Dashboard
               <ArrowRight className="ml-2 h-4 w-4" />

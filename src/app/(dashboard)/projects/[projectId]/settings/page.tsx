@@ -590,7 +590,7 @@ export default function SettingsPage() {
                       Events: {JSON.parse(wh.events).join(", ")}
                     </p>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteWebhook(wh.id)}>
+                  <Button variant="ghost" size="icon" onClick={() => handleDeleteWebhook(wh.id)} data-testid="webhook-delete-btn">
                     <X className="h-4 w-4" />
                   </Button>
                 </div>

@@ -26,6 +26,7 @@ interface PipelineFeedProps {
   projectId: string;
   labels: Array<{ id: string; name: string; color: string }>;
   members?: Array<{ id: string; name: string | null; image: string | null }>;
+  sprints?: Array<{ id: string; name: string; status: string }>;
   techStack?: string | null;
   filters: BoardFilterState;
   onFiltersChange: (filters: BoardFilterState) => void;
@@ -36,6 +37,7 @@ export function PipelineFeed({
   projectId,
   labels,
   members = [],
+  sprints = [],
   filters,
   onFiltersChange,
 }: PipelineFeedProps) {
@@ -118,7 +120,11 @@ export function PipelineFeed({
       return items.filter((s) => {
         if (filters.search) {
           const q = filters.search.toLowerCase();
-          if (!s.title.toLowerCase().includes(q) && !s.shortId.toLowerCase().includes(q))
+          if (
+            !s.title.toLowerCase().includes(q) &&
+            !s.shortId.toLowerCase().includes(q) &&
+            !(s.description ?? "").toLowerCase().includes(q)
+          )
             return false;
         }
         if (filters.priorities.length > 0 && !filters.priorities.includes(s.priority))
@@ -133,6 +139,14 @@ export function PipelineFeed({
         if (filters.assigneeIds.length > 0) {
           if (!s.assigneeId || !filters.assigneeIds.includes(s.assigneeId))
             return false;
+        }
+        // Sprint filter
+        if (filters.sprintId) {
+          if (s.sprintId !== filters.sprintId) return false;
+        }
+        // Agent status filter
+        if (filters.agentStatuses.length > 0) {
+          if (!s.agentStatus || !filters.agentStatuses.includes(s.agentStatus)) return false;
         }
         return true;
       });
@@ -161,6 +175,7 @@ export function PipelineFeed({
         onFiltersChange={onFiltersChange}
         labels={labels}
         members={members}
+        sprints={sprints}
       />
 
       <div className="flex-1 overflow-y-auto px-4 py-3">

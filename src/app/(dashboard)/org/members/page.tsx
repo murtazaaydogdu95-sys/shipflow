@@ -125,11 +125,12 @@ export default function OrgMembersPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              data-testid="invite-email"
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <Select value={inviteRole} onValueChange={setInviteRole}>
-            <SelectTrigger className="w-[130px]">
+            <SelectTrigger className="w-[130px]" data-testid="invite-role">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -138,7 +139,7 @@ export default function OrgMembersPage() {
               <SelectItem value="OWNER">Owner</SelectItem>
             </SelectContent>
           </Select>
-          <Button type="submit" disabled={loading || !email.trim()}>
+          <Button type="submit" disabled={loading || !email.trim()} data-testid="invite-btn">
             {loading ? "Inviting..." : "Invite"}
           </Button>
         </form>
@@ -149,6 +150,7 @@ export default function OrgMembersPage() {
           <div
             key={member.id}
             className="flex items-center gap-4 p-3 rounded-lg border"
+            data-testid={`member-row-${(member.user.email || "").replace(/[^a-zA-Z0-9]/g, "-")}`}
           >
             <Avatar className="h-9 w-9">
               <AvatarImage src={member.user.image ?? undefined} />

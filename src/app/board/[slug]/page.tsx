@@ -106,7 +106,7 @@ export default async function PublicBoardPage({ params }: PageProps) {
               <Rocket className="h-5 w-5" />
             </Link>
             <div>
-              <h1 className="text-lg font-bold">{project.name}</h1>
+              <h1 className="text-lg font-bold" data-testid="public-board-title">{project.name}</h1>
               {project.techStack && (
                 <p className="text-xs text-muted-foreground">{project.techStack}</p>
               )}
@@ -130,6 +130,7 @@ export default async function PublicBoardPage({ params }: PageProps) {
               <div
                 key={status}
                 className="flex flex-col w-64 sm:w-72 min-w-[256px] sm:min-w-[288px] bg-muted/30 rounded-xl shrink-0"
+                data-testid={`public-board-column-${status}`}
               >
                 <div className="flex items-center gap-2 p-3 pb-2">
                   <h2 className="text-sm font-semibold">{COLUMN_LABELS[status]}</h2>
@@ -197,7 +198,7 @@ export default async function PublicBoardPage({ params }: PageProps) {
       <footer className="border-t mt-8">
         <div className="max-w-7xl mx-auto px-6 py-6 text-center space-y-2">
           <p className="text-sm font-medium">Ship features faster with AI agents</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground" data-testid="public-board-signup-cta">
             Powered by <Link href="/" className="underline hover:text-foreground">Codepylot</Link>
             {" — "}
             <Link href="/auth/signin" className="underline hover:text-foreground">Start building your own board</Link>

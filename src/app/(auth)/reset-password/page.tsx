@@ -89,6 +89,7 @@ function ResetPasswordForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              data-testid="reset-password"
             />
             <Input
               type="password"
@@ -96,9 +97,10 @@ function ResetPasswordForm() {
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               required
+              data-testid="reset-confirm"
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading} data-testid="reset-submit">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Reset Password
             </Button>

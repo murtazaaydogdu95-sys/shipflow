@@ -103,6 +103,7 @@ export function StoryReviewPanel({
             onClick={onApprove}
             disabled={reviewLoading || (!hasViewedDiff && !!story.branchName)}
             className="flex-1 bg-green-600 hover:bg-green-700"
+            data-testid="review-approve-btn"
             title={!hasViewedDiff && story.branchName ? "Review the diff first" : undefined}
           >
             {reviewLoading ? (
@@ -126,6 +127,7 @@ export function StoryReviewPanel({
             onClick={() => setRejecting(true)}
             disabled={reviewLoading}
             className="flex-1 border-red-500/50 text-red-500 hover:bg-red-500/10"
+            data-testid="review-reject-btn"
           >
             <ThumbsDown className="mr-2 h-4 w-4" />
             Request Changes

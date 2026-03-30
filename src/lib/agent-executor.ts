@@ -17,6 +17,44 @@ const BRANCH_PREFIX: Record<string, string> = {
 };
 
 /**
+ * Lazily resolve the git binary path. The Next.js server process may not have
+ * git on its PATH (especially on Vercel or inside Docker), so we probe known
+ * install locations first, then fall back to `which`.
+ */
+let _gitBin: string | null = null;
+function getGitBin(): string {
+  if (_gitBin) return _gitBin;
+
+  const candidates = [
+    "/usr/bin/git",
+    "/usr/local/bin/git",
+    "/opt/homebrew/bin/git",
+    path.join(homedir(), ".local", "bin", "git"),
+  ];
+
+  for (const p of candidates) {
+    try {
+      accessSync(p, constants.X_OK);
+      _gitBin = p;
+      return p;
+    } catch {
+      // try next
+    }
+  }
+
+  // Fall back to which
+  try {
+    _gitBin = execFileSync("/usr/bin/which", ["git"], { encoding: "utf-8" }).trim();
+    return _gitBin;
+  } catch {
+    // last resort
+  }
+
+  _gitBin = "git";
+  return _gitBin;
+}
+
+/**
  * Lazily resolve the claude binary path. Cached after first successful resolution.
  */
 let _claudeBin: string | null = null;
@@ -71,7 +109,7 @@ export async function ensureBranch(
   if (story.branchName) {
     // Re-trigger: checkout existing branch
     try {
-      execFileSync("git", ["checkout", story.branchName], opts);
+      execFileSync(getGitBin(), ["checkout", story.branchName], opts);
     } catch {
       // Branch might already be checked out
     }
@@ -89,14 +127,14 @@ export async function ensureBranch(
   const branchName = `${prefix}/${story.shortId}-${slug}`;
 
   try {
-    execFileSync("git", ["checkout", "main"], opts);
-    execFileSync("git", ["pull", "origin", "main"], opts);
+    execFileSync(getGitBin(), ["checkout", "main"], opts);
+    execFileSync(getGitBin(), ["pull", "origin", "main"], opts);
   } catch {
     // If pull fails (no remote, etc.), just stay on main
     console.warn("[agent-executor] git pull failed, continuing on current main");
   }
 
-  execFileSync("git", ["checkout", "-b", branchName], opts);
+  execFileSync(getGitBin(), ["checkout", "-b", branchName], opts);
 
   // Store branch name on story
   await prisma.story.update({

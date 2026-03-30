@@ -21,7 +21,7 @@ export function UserNav() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent">
+      <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent" data-testid="user-nav-trigger">
         <Avatar className="h-7 w-7">
           <AvatarImage src={user.image || undefined} />
           <AvatarFallback>{user.name?.[0] || "U"}</AvatarFallback>
@@ -32,19 +32,19 @@ export function UserNav() {
         <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/account/profile">
+          <Link href="/account/profile" data-testid="user-nav-profile">
             <User className="mr-2 h-4 w-4" />
             Profile
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/account/notifications">
+          <Link href="/account/notifications" data-testid="user-nav-settings">
             <Bell className="mr-2 h-4 w-4" />
             Notification Settings
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
+        <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })} data-testid="user-nav-logout">
           <LogOut className="mr-2 h-4 w-4" />
           Sign out
         </DropdownMenuItem>

@@ -417,6 +417,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                   {story.shortId}
                 </Badge>
                 <Badge
+                  data-testid="story-detail-status"
                   className={
                     story.status === "DONE"
                       ? "bg-green-500"

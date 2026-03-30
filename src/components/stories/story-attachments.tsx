@@ -21,7 +21,7 @@ export function StoryAttachments({
 }: StoryAttachmentsProps) {
   return (
     <>
-      <div>
+      <div data-testid="attach-upload-btn">
         <label
           className="flex items-center gap-2 text-sm font-medium cursor-pointer border-2 border-dashed rounded-lg p-4 hover:border-primary/50 transition-colors text-center justify-center"
           onDragOver={(e) => e.preventDefault()}
@@ -45,7 +45,7 @@ export function StoryAttachments({
         </label>
       </div>
       {attachments && attachments.length > 0 ? (
-        <div className="space-y-2">
+        <div className="space-y-2" data-testid="attach-list">
           {attachments.map((att) => (
             <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm rounded border p-2 hover:bg-muted/50 transition-colors">
               {att.mimeType.startsWith("image/") ? (

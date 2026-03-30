@@ -19,10 +19,10 @@ type ViewMode = "feed" | "board";
 
 const STORAGE_KEY = "codepylot-view-preference";
 
+// Always start with "feed" on both server and client to avoid hydration mismatch.
+// The stored preference is applied in a useEffect after mount.
 function getInitialView(): ViewMode {
-  if (typeof window === "undefined") return "feed";
-  const stored = localStorage.getItem(STORAGE_KEY);
-  return stored === "board" ? "board" : "feed";
+  return "feed";
 }
 
 interface ProjectViewProps {
@@ -31,6 +31,7 @@ interface ProjectViewProps {
   projectName: string;
   labels: Array<{ id: string; name: string; color: string }>;
   members?: Array<{ id: string; name: string | null; image: string | null }>;
+  sprints?: Array<{ id: string; name: string; status: string }>;
   techStack?: string | null;
 }
 
@@ -40,6 +41,7 @@ export function ProjectView({
   projectName,
   labels,
   members = [],
+  sprints = [],
   techStack,
 }: ProjectViewProps) {
   const [view, setView] = useState<ViewMode>(getInitialView);
@@ -48,6 +50,12 @@ export function ProjectView({
   const [focusMode, setFocusMode] = useState(false);
   const [focusedStoryId, setFocusedStoryId] = useState<string | null>(null);
   const [standupOpen, setStandupOpen] = useState(false);
+
+  // Restore saved view preference after hydration (avoids SSR mismatch)
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "board") setView("board");
+  }, []);
 
   // Flatten all stories for focus mode navigation
   const allStories = initialColumns.flatMap((col) => col.stories);
@@ -228,6 +236,7 @@ export function ProjectView({
           projectId={projectId}
           labels={labels}
           members={members}
+          sprints={sprints}
           techStack={techStack}
           filters={filters}
           onFiltersChange={setFilters}
@@ -239,6 +248,7 @@ export function ProjectView({
           projectName={boardTitle}
           labels={labels}
           members={members}
+          sprints={sprints}
           techStack={techStack}
           filters={filters}
           onFiltersChange={setFilters}

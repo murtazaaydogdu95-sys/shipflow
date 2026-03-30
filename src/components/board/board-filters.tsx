@@ -8,6 +8,13 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Search, X, Filter } from "lucide-react";
 import { PRIORITIES, STORY_TYPES } from "@/types";
 
@@ -17,6 +24,8 @@ export interface BoardFilterState {
   types: string[];
   labelIds: string[];
   assigneeIds: string[];
+  sprintId: string | null;
+  agentStatuses: string[];
 }
 
 const EMPTY_FILTERS: BoardFilterState = {
@@ -25,22 +34,29 @@ const EMPTY_FILTERS: BoardFilterState = {
   types: [],
   labelIds: [],
   assigneeIds: [],
+  sprintId: null,
+  agentStatuses: [],
 };
+
+const AGENT_STATUSES = ["QUEUED", "RUNNING", "COMPLETED", "FAILED"] as const;
 
 interface BoardFiltersProps {
   filters: BoardFilterState;
   onFiltersChange: (filters: BoardFilterState) => void;
   labels: Array<{ id: string; name: string; color: string }>;
   members: Array<{ id: string; name: string | null; image: string | null }>;
+  sprints?: Array<{ id: string; name: string; status: string }>;
 }
 
-export function BoardFilters({ filters, onFiltersChange, labels, members }: BoardFiltersProps) {
+export function BoardFilters({ filters, onFiltersChange, labels, members, sprints }: BoardFiltersProps) {
   const hasActiveFilters =
     filters.search ||
     filters.priorities.length > 0 ||
     filters.types.length > 0 ||
     filters.labelIds.length > 0 ||
-    filters.assigneeIds.length > 0;
+    filters.assigneeIds.length > 0 ||
+    filters.sprintId !== null ||
+    filters.agentStatuses.length > 0;
 
   function toggleArrayItem(arr: string[], item: string): string[] {
     return arr.includes(item) ? arr.filter((i) => i !== item) : [...arr, item];
@@ -60,7 +76,7 @@ export function BoardFilters({ filters, onFiltersChange, labels, members }: Boar
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" data-testid="filter-priority">
             <Filter className="h-3 w-3" />
             Priority
             {filters.priorities.length > 0 && (
@@ -87,7 +103,7 @@ export function BoardFilters({ filters, onFiltersChange, labels, members }: Boar
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" data-testid="filter-type">
             <Filter className="h-3 w-3" />
             Type
             {filters.types.length > 0 && (
@@ -148,7 +164,7 @@ export function BoardFilters({ filters, onFiltersChange, labels, members }: Boar
       {members.length > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1" data-testid="filter-assignee">
               <Filter className="h-3 w-3" />
               Assignee
               {filters.assigneeIds.length > 0 && (
@@ -174,12 +190,57 @@ export function BoardFilters({ filters, onFiltersChange, labels, members }: Boar
         </DropdownMenu>
       )}
 
+      {(sprints?.length ?? 0) > 0 && (
+        <Select
+          value={filters.sprintId ?? "all"}
+          onValueChange={(val) => onFiltersChange({ ...filters, sprintId: val === "all" ? null : val })}
+        >
+          <SelectTrigger className="h-8 w-auto text-xs gap-1" data-testid="filter-sprint">
+            <SelectValue placeholder="Sprint" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sprints</SelectItem>
+            {sprints?.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1" data-testid="filter-agent-status">
+            <Filter className="h-3 w-3" />
+            Agent
+            {filters.agentStatuses.length > 0 && (
+              <span className="ml-1 rounded-full bg-primary text-primary-foreground px-1.5 text-[10px]">
+                {filters.agentStatuses.length}
+              </span>
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {AGENT_STATUSES.map((status) => (
+            <DropdownMenuCheckboxItem
+              key={status}
+              checked={filters.agentStatuses.includes(status)}
+              onCheckedChange={() =>
+                onFiltersChange({ ...filters, agentStatuses: toggleArrayItem(filters.agentStatuses, status) })
+              }
+            >
+              {status}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
       {hasActiveFilters && (
         <Button
           variant="ghost"
           size="sm"
           className="h-8 text-xs"
           onClick={() => onFiltersChange(EMPTY_FILTERS)}
+          data-testid="filter-clear"
         >
           <X className="mr-1 h-3 w-3" />
           Clear filters

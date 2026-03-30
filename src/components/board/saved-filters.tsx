@@ -47,7 +47,9 @@ function filtersMatch(a: BoardFilterState, b: BoardFilterState): boolean {
     JSON.stringify(a.priorities.slice().sort()) === JSON.stringify((b.priorities || []).slice().sort()) &&
     JSON.stringify(a.types.slice().sort()) === JSON.stringify((b.types || []).slice().sort()) &&
     JSON.stringify(a.labelIds.slice().sort()) === JSON.stringify((b.labelIds || []).slice().sort()) &&
-    JSON.stringify(a.assigneeIds.slice().sort()) === JSON.stringify((b.assigneeIds || []).slice().sort())
+    JSON.stringify(a.assigneeIds.slice().sort()) === JSON.stringify((b.assigneeIds || []).slice().sort()) &&
+    (a.sprintId ?? null) === (b.sprintId ?? null) &&
+    JSON.stringify((a.agentStatuses || []).slice().sort()) === JSON.stringify((b.agentStatuses || []).slice().sort())
   );
 }
 
@@ -111,6 +113,8 @@ export function SavedFilters({ projectId, currentFilters, onApplyFilter }: Saved
               types: currentFilters.types.length > 0 ? currentFilters.types : undefined,
               labelIds: currentFilters.labelIds.length > 0 ? currentFilters.labelIds : undefined,
               assigneeIds: currentFilters.assigneeIds.length > 0 ? currentFilters.assigneeIds : undefined,
+              sprintId: currentFilters.sprintId || undefined,
+              agentStatuses: currentFilters.agentStatuses.length > 0 ? currentFilters.agentStatuses : undefined,
             },
           }),
         });
@@ -255,6 +259,7 @@ export function SavedFilters({ projectId, currentFilters, onApplyFilter }: Saved
               e.preventDefault();
               handleOpenSaveDialog();
             }}
+            data-testid="filter-save"
           >
             <Plus className="h-3.5 w-3.5 mr-2" />
             Save current filter
@@ -277,6 +282,7 @@ export function SavedFilters({ projectId, currentFilters, onApplyFilter }: Saved
               }}
               autoFocus
               maxLength={50}
+              data-testid="filter-name-input"
             />
           </div>
           <DialogFooter>
@@ -301,5 +307,7 @@ function normalizeFilter(f: Partial<BoardFilterState>): BoardFilterState {
     types: f.types ?? [],
     labelIds: f.labelIds ?? [],
     assigneeIds: f.assigneeIds ?? [],
+    sprintId: f.sprintId ?? null,
+    agentStatuses: f.agentStatuses ?? [],
   };
 }

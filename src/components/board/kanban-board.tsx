@@ -36,13 +36,14 @@ interface KanbanBoardProps {
   projectName: string;
   labels: Array<{ id: string; name: string; color: string }>;
   members?: Array<{ id: string; name: string | null; image: string | null }>;
+  sprints?: Array<{ id: string; name: string; status: string }>;
   techStack?: string | null;
   filters?: BoardFilterState;
   onFiltersChange?: (filters: BoardFilterState) => void;
   onFocusStory?: (storyId: string) => void;
 }
 
-export function KanbanBoard({ initialColumns, projectId, labels, members = [], filters: externalFilters, onFiltersChange: externalOnFiltersChange, onFocusStory }: KanbanBoardProps) {
+export function KanbanBoard({ initialColumns, projectId, labels, members = [], sprints = [], filters: externalFilters, onFiltersChange: externalOnFiltersChange, onFocusStory }: KanbanBoardProps) {
   const [columns, setColumns] = useState<BoardColumnType[]>(initialColumns);
   const [internalFilters, setInternalFilters] = useState<BoardFilterState>(EMPTY_FILTERS);
   const filters = externalFilters ?? internalFilters;
@@ -403,7 +404,8 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
           const q = filters.search.toLowerCase();
           if (
             !s.title.toLowerCase().includes(q) &&
-            !s.shortId.toLowerCase().includes(q)
+            !s.shortId.toLowerCase().includes(q) &&
+            !(s.description ?? "").toLowerCase().includes(q)
           )
             return false;
         }
@@ -419,6 +421,14 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
         if (filters.assigneeIds.length > 0) {
           if (!s.assigneeId || !filters.assigneeIds.includes(s.assigneeId))
             return false;
+        }
+        // Sprint filter
+        if (filters.sprintId) {
+          if (s.sprintId !== filters.sprintId) return false;
+        }
+        // Agent status filter
+        if (filters.agentStatuses.length > 0) {
+          if (!s.agentStatus || !filters.agentStatuses.includes(s.agentStatus)) return false;
         }
         return true;
       });
@@ -503,6 +513,18 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [columns, focusedCol, focusedRow, bulkMode, visibleStatuses, filterStories]);
 
+  // Compute filter result counts
+  const totalStoryCount = columns.reduce((sum, col) => sum + col.stories.length, 0);
+  const filteredStoryCount = columns.reduce((sum, col) => sum + filterStories(col.stories).length, 0);
+  const hasActiveFilters =
+    filters.search ||
+    filters.priorities.length > 0 ||
+    filters.types.length > 0 ||
+    filters.labelIds.length > 0 ||
+    filters.assigneeIds.length > 0 ||
+    filters.sprintId !== null ||
+    filters.agentStatuses.length > 0;
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 flex-wrap">
@@ -512,9 +534,15 @@ export function KanbanBoard({ initialColumns, projectId, labels, members = [], f
             onFiltersChange={setFilters}
             labels={labels}
             members={members}
+            sprints={sprints}
           />
         </div>
         <div className="flex items-center gap-1.5 px-4 py-1 shrink-0">
+          {hasActiveFilters && (
+            <span className="text-xs text-muted-foreground" data-testid="filter-count">
+              {filteredStoryCount} of {totalStoryCount} stories
+            </span>
+          )}
           <SavedFilters
             projectId={projectId}
             currentFilters={filters}

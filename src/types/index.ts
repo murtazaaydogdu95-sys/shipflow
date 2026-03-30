@@ -75,3 +75,30 @@ export const FEED_SECTION_TITLES: Record<StoryStatus, string> = {
   ICEBOX: "Someday",
   DONE: "Completed",
 };
+
+export interface BurndownDataPoint {
+  date: string;
+  idealRemaining: number;
+  actualRemaining: number | null;
+}
+
+export interface BurndownSummary {
+  totalPoints: number;
+  completedPoints: number;
+  remainingPoints: number;
+  daysTotal: number;
+  daysElapsed: number;
+  daysRemaining: number;
+}
+
+export interface BurndownResponse {
+  sprint: {
+    id: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+    totalPoints: number;
+  };
+  dataPoints: BurndownDataPoint[];
+  summary: BurndownSummary;
+}

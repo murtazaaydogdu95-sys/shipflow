@@ -267,6 +267,111 @@ export async function seedTestDb() {
     },
   });
 
+  // === NEW TEST USERS ===
+
+  // Admin user
+  const adminUser = await prisma.user.create({
+    data: {
+      id: "test-admin-id",
+      name: "Admin User",
+      email: "admin@codepylot.dev",
+      passwordHash: hashSync("adminpassword123", 10),
+      isAdmin: false,
+      onboardingCompleted: true,
+    },
+  });
+
+  // Member user
+  const memberUser = await prisma.user.create({
+    data: {
+      id: "test-member-id",
+      name: "Member User",
+      email: "member@codepylot.dev",
+      passwordHash: hashSync("memberpassword123", 10),
+      isAdmin: false,
+      onboardingCompleted: true,
+    },
+  });
+
+  // New user (onboarding not completed)
+  await prisma.user.create({
+    data: {
+      id: "test-new-user-id",
+      name: "New User",
+      email: "newuser@codepylot.dev",
+      passwordHash: hashSync("newuserpassword123", 10),
+      isAdmin: false,
+      onboardingCompleted: false,
+    },
+  });
+
+  // Add admin + member to org
+  await prisma.orgMember.create({
+    data: { userId: adminUser.id, orgId: org.id, role: "ADMIN" },
+  });
+  await prisma.orgMember.create({
+    data: { userId: memberUser.id, orgId: org.id, role: "MEMBER" },
+  });
+
+  // Set currentOrgId
+  await prisma.user.update({ where: { id: adminUser.id }, data: { currentOrgId: org.id } });
+  await prisma.user.update({ where: { id: memberUser.id }, data: { currentOrgId: org.id } });
+
+  // Add to project
+  await prisma.projectMember.create({
+    data: { userId: adminUser.id, projectId: project.id, role: "ADMIN" },
+  });
+  await prisma.projectMember.create({
+    data: { userId: memberUser.id, projectId: project.id, role: "MEMBER" },
+  });
+
+  // Second org for switching tests
+  const secondOrg = await prisma.organization.create({
+    data: {
+      id: "test-org-2-id",
+      name: "Second Workspace",
+      slug: "second-workspace",
+      plan: "FREE",
+      isPersonal: false,
+    },
+  });
+  await prisma.orgMember.create({
+    data: { userId: user.id, orgId: secondOrg.id, role: "OWNER" },
+  });
+
+  // Public project
+  const publicProject = await prisma.project.create({
+    data: {
+      id: "test-public-project-id",
+      name: "Public Project",
+      slug: "public-project",
+      description: "A publicly visible project",
+      isPublic: true,
+      orgId: org.id,
+    },
+  });
+  await prisma.projectMember.create({
+    data: { userId: user.id, projectId: publicProject.id, role: "OWNER" },
+  });
+  await prisma.story.create({
+    data: {
+      id: "story-public-1",
+      shortId: "PB-001",
+      title: "Public board feature",
+      status: "TODO",
+      priority: "HIGH",
+      type: "feature",
+      position: 0,
+      projectId: publicProject.id,
+    },
+  });
+
+  // Clear reviewedAt on review story for agent-review tests
+  await prisma.story.update({
+    where: { id: "story-review-1" },
+    data: { reviewedAt: null, reviewedBy: null },
+  });
+
   console.log("Test database seeded successfully");
 }
 

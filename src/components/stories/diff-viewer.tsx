@@ -85,9 +85,9 @@ export function DiffViewer({ rawDiff }: DiffViewerProps) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="diff-viewer">
       {totalRisks > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm" data-testid="diff-risk-indicator">
           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
           <div>
             <span className="font-medium text-amber-600">{totalRisks} potential {totalRisks === 1 ? "risk" : "risks"} detected</span>
