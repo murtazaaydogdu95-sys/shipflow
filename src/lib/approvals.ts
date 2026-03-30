@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const VALID_DECISION_TRANSITIONS: Record<string, string[]> = {
@@ -27,7 +28,7 @@ export async function createApproval(params: CreateApprovalParams) {
     data: {
       orgId: params.orgId,
       type: params.type,
-      payload: params.payload as Record<string, unknown> & object,
+      payload: params.payload as Prisma.InputJsonValue,
       requestedById: params.requestedById,
     },
     include: {

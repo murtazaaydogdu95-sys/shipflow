@@ -112,7 +112,7 @@ export async function POST(
         workingDir: data.workingDir,
         branchName: data.branchName ?? null,
         cloneUrl: data.cloneUrl ?? null,
-        metadata: data.metadata ?? Prisma.JsonNull,
+        metadata: data.metadata ? (data.metadata as Prisma.InputJsonValue) : Prisma.JsonNull,
       },
       include: {
         agent: { select: { id: true, name: true, role: true, status: true } },

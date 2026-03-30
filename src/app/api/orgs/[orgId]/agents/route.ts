@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkOrgPermission } from "@/lib/permissions";
@@ -131,7 +132,7 @@ export async function POST(
           icon: data.icon,
           capabilities: data.capabilities,
           adapterType: data.adapterType,
-          adapterConfig: data.adapterConfig ?? undefined,
+          adapterConfig: data.adapterConfig ? (data.adapterConfig as Prisma.InputJsonValue) : undefined,
           reportsTo: data.reportsTo,
           status: requiresApproval ? "pending_approval" : "idle",
         },

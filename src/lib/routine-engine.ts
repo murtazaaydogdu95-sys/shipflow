@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sanitizeError } from "@/lib/api-error";
 import { checkBudget } from "@/lib/budget-check";
@@ -253,7 +254,7 @@ export async function triggerRoutineManually(
         source,
         status: "skipped",
         skipReason: policy.skipReason ?? "Concurrency policy blocked",
-        webhookPayload: webhookPayload ? (webhookPayload as object) : undefined,
+        webhookPayload: webhookPayload ? (webhookPayload as Prisma.InputJsonValue) : undefined,
       },
     });
     return { runId: run.id, storyId: null, skipped: true, skipReason: policy.skipReason };
@@ -291,7 +292,7 @@ export async function triggerRoutineManually(
           source,
           status: "completed",
           storyId: story.id,
-          webhookPayload: webhookPayload ? (webhookPayload as object) : undefined,
+          webhookPayload: webhookPayload ? (webhookPayload as Prisma.InputJsonValue) : undefined,
         },
       });
 

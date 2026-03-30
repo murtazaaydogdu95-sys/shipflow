@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkOrgPermission } from "@/lib/permissions";
@@ -174,7 +175,7 @@ export async function PATCH(
     if (data.icon !== undefined) updateData.icon = data.icon;
     if (data.capabilities !== undefined) updateData.capabilities = data.capabilities;
     if (data.adapterType !== undefined) updateData.adapterType = data.adapterType;
-    if (data.adapterConfig !== undefined) updateData.adapterConfig = data.adapterConfig;
+    if (data.adapterConfig !== undefined) updateData.adapterConfig = data.adapterConfig as Prisma.InputJsonValue;
     if (data.reportsTo !== undefined) updateData.reportsTo = data.reportsTo;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.pauseReason !== undefined) updateData.pauseReason = data.pauseReason;

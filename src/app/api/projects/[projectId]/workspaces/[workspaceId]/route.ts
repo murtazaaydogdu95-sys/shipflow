@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { updateWorkspaceSchema } from "@/lib/validations/workspace";
@@ -66,7 +67,7 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
     if (data.status !== undefined) updateData.status = data.status;
     if (data.branchName !== undefined) updateData.branchName = data.branchName;
-    if (data.metadata !== undefined) updateData.metadata = data.metadata;
+    if (data.metadata !== undefined) updateData.metadata = data.metadata as Prisma.InputJsonValue;
     if (data.status === "closed") updateData.closedAt = new Date();
 
     const workspace = await prisma.executionWorkspace.update({
