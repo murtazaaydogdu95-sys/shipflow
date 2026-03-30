@@ -542,7 +542,7 @@ When complete, commit with message: "feat: ${story.title} [${story.shortId}]"`;
                   <SubTaskList
                     projectId={projectId}
                     parentStoryId={story.id}
-                    children={(fullStory?.children ?? story.children ?? []) as { id: string; shortId: string; title: string; status: string; priority: string; type: string }[]}
+                    subTasks={(fullStory?.children ?? story.children ?? []) as { id: string; shortId: string; title: string; status: string; priority: string; type: string }[]}
                     onSubTaskClick={(childId) => {
                       // Close current modal and open the child story
                       // For now, we navigate - the parent component handles this

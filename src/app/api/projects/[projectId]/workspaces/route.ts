@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { createWorkspaceSchema } from "@/lib/validations/workspace";
@@ -111,7 +112,7 @@ export async function POST(
         workingDir: data.workingDir,
         branchName: data.branchName ?? null,
         cloneUrl: data.cloneUrl ?? null,
-        metadata: data.metadata ?? null,
+        metadata: data.metadata ?? Prisma.JsonNull,
       },
       include: {
         agent: { select: { id: true, name: true, role: true, status: true } },

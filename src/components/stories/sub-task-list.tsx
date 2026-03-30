@@ -21,7 +21,7 @@ interface SubTask {
 interface SubTaskListProps {
   projectId: string;
   parentStoryId: string;
-  children: SubTask[];
+  subTasks: SubTask[];
   onSubTaskClick: (storyId: string) => void;
   onSubTaskCreated: () => void;
 }
@@ -45,7 +45,7 @@ const statusColors: Record<string, string> = {
 export function SubTaskList({
   projectId,
   parentStoryId,
-  children,
+  subTasks,
   onSubTaskClick,
   onSubTaskCreated,
 }: SubTaskListProps) {
@@ -56,8 +56,8 @@ export function SubTaskList({
   const [newPriority, setNewPriority] = useState("MEDIUM");
   const [creating, setCreating] = useState(false);
 
-  const doneCount = children.filter((c) => c.status === "DONE").length;
-  const totalCount = children.length;
+  const doneCount = subTasks.filter((c) => c.status === "DONE").length;
+  const totalCount = subTasks.length;
   const progressPercent = totalCount > 0 ? (doneCount / totalCount) * 100 : 0;
 
   async function handleCreateSubTask() {
@@ -121,7 +121,7 @@ export function SubTaskList({
       {expanded && (
         <div className="border-t">
           {/* Sub-task rows */}
-          {children.map((child) => (
+          {subTasks.map((child) => (
             <button
               key={child.id}
               data-testid={`subtask-row-${child.shortId}`}
