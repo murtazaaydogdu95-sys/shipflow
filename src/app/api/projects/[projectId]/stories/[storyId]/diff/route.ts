@@ -3,6 +3,7 @@ import { execFileSync } from "child_process";
 import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { sanitizeError } from "@/lib/api-error";
+import { getGitBin } from "@/lib/agent-executor";
 
 export async function GET(
   req: Request,
