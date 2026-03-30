@@ -37,9 +37,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install git (needed for GitHub import clone) and prisma CLI + tsx for entrypoint
+# Install git (needed for GitHub import clone) and prisma CLI + tsx + dotenv for entrypoint
 RUN apk add --no-cache git && \
-    npm install -g prisma@6 tsx
+    npm install -g prisma@6 tsx dotenv
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
@@ -53,8 +53,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma schema + generated client (needed for db push at runtime)
+# Copy Prisma schema + config + generated client (needed for db push at runtime)
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
