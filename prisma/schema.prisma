@@ -123,6 +123,7 @@ model Organization {
   budgetPolicies   BudgetPolicy[]
   approvals        Approval[]
   executionWorkspaces ExecutionWorkspace[]
+  goals            Goal[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 }
@@ -179,6 +180,7 @@ model Project {
   savedFilters  SavedFilter[]
   costEvents    CostEvent[]
   routines      Routine[]
+  goals         Goal[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -234,8 +236,10 @@ model Story {
   deployUrl          String?
   deployedAt         DateTime?
   routineId          String?
+  goalId             String?
   project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   routine            Routine?             @relation(fields: [routineId], references: [id], onDelete: SetNull)
+  goal               Goal?                @relation(fields: [goalId], references: [id], onDelete: SetNull)
   sprint             Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   assignee           User?                @relation("AssignedStories", fields: [assigneeId], references: [id], onDelete: SetNull)
   agent              Agent?               @relation("AgentStories", fields: [agentId], references: [id], onDelete: SetNull)
@@ -261,6 +265,7 @@ model Story {
   @@index([assigneeId, status])
   @@index([agentId])
   @@index([routineId])
+  @@index([goalId])
 }
 
 model AcceptanceCriterion {
@@ -758,4 +763,27 @@ model ReadState {
   @@unique([userId, entityType, entityId])
   @@index([userId, entityType])
   @@index([entityId])
+}
+
+model Goal {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  level        String   @default("project") // company, team, project
+  status       String   @default("planned") // planned, active, completed
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  parentId     String?
+  parent       Goal?    @relation("GoalHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Goal[]   @relation("GoalHierarchy")
+  ownerAgentId String?
+  stories      Story[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orgId])
+  @@index([projectId])
+  @@index([parentId])
 }
