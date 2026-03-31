@@ -25,6 +25,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
     GitHub({
+      clientId: process.env.GITHUB_ID!,
+      clientSecret: process.env.GITHUB_SECRET!,
       authorization: {
         params: { scope: "read:user user:email repo" },
       },
@@ -37,7 +39,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       },
     }),
-    Google({}),
+    Google({
+      clientId: process.env.GOOGLE_ID!,
+      clientSecret: process.env.GOOGLE_SECRET!,
+    }),
     Credentials({
       name: "Credentials",
       credentials: {
