@@ -67,7 +67,6 @@ services:
       DATABASE_URL: postgresql://codepylot:codepylot@postgres:5432/codepylot
       OLLAMA_URL: http://ollama:11434/v1
       AUTH_TRUST_HOST: "true"
-      NEXTAUTH_URL: http://localhost:3000
       CODEPYLOT_REPOS_DIR: /app/repos
     volumes:
       - repos_data:/app/repos
