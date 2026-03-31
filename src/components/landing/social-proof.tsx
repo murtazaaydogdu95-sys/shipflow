@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Star, Quote } from "lucide-react";
+import { Star, Quote, ShieldCheck, Server, Plug, Wallet, Eye } from "lucide-react";
 
 const stats = [
   { value: "500+", label: "developers" },
@@ -154,6 +154,68 @@ export function SocialProof() {
               </div>
             </motion.div>
           ))}
+        </motion.div>
+
+        {/* Divider */}
+        <div className="mx-auto mt-16 h-px max-w-xs bg-gradient-to-r from-transparent via-border to-transparent" />
+
+        {/* Differentiators */}
+        <motion.div
+          className="mt-16"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.4 }}
+        >
+          <h3 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">
+            Why teams choose Codepylot
+          </h3>
+          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              {
+                icon: ShieldCheck,
+                title: "Trust Gate",
+                description: "AI writes code, humans review. Nothing merges without your approval.",
+              },
+              {
+                icon: Plug,
+                title: "No Vendor Lock-in",
+                description: "Bring your own AI provider — Claude, OpenAI, Ollama, or custom HTTP.",
+              },
+              {
+                icon: Wallet,
+                title: "Budget Controls",
+                description: "Set spending limits per agent, project, or org. No surprise costs.",
+              },
+              {
+                icon: Server,
+                title: "Self-Hostable",
+                description: "Run on your own infrastructure with Docker. Your data stays yours.",
+              },
+              {
+                icon: Eye,
+                title: "Full Transparency",
+                description: "Track every token, every cost, every decision. Complete audit trail.",
+              },
+            ].map((diff, i) => (
+              <motion.div
+                key={diff.title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 0.4, delay: i * 0.08 }}
+                className="text-center"
+              >
+                <div className="mx-auto mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <diff.icon className="h-5 w-5" />
+                </div>
+                <h4 className="text-sm font-semibold">{diff.title}</h4>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {diff.description}
+                </p>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
       </div>
     </section>

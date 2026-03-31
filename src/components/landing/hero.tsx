@@ -54,7 +54,7 @@ export function Hero() {
         >
           <Badge variant="secondary" className="mb-6 gap-1.5 px-3 py-1.5 text-sm font-medium border border-border/60 shadow-sm">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            AI agents that write code for you
+            Your AI agent workforce — managed, governed, and always shipping
           </Badge>
         </motion.div>
 
@@ -97,8 +97,8 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.15 }}
         >
-          Describe what you want built. AI structures it into stories, agents
-          write the code, and you review and ship — all from one board.
+          Build your AI agent workforce. Set budgets, choose providers, define
+          goals — and let them ship code while you stay in control with Trust Gate.
         </motion.p>
 
         <motion.div

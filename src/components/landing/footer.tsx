@@ -21,10 +21,10 @@ export function Footer() {
           transition={{ duration: 0.5 }}
         >
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
-            Ready to stop writing code yourself?
+            Ready to build your AI agent workforce?
           </h2>
           <p className="mx-auto mt-4 max-w-lg text-lg text-muted-foreground">
-            Describe what you want. Let the AI agent handle the rest.
+            Describe what you want. Your agents write the code. You stay in control.
           </p>
           <div className="mt-8">
             <Button asChild size="lg" className="h-12 gap-2 px-8 text-base shadow-xl shadow-primary/25">

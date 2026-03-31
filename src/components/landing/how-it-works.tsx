@@ -1,13 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Lightbulb, Sparkles, Layout, Rocket, CheckCircle2 } from "lucide-react";
+import { Lightbulb, Sparkles, Bot, ShieldCheck, GitCompare, RefreshCw } from "lucide-react";
 
 const steps = [
   {
     icon: Lightbulb,
-    title: "Capture an Idea",
-    description: "Open Quick Capture (Cmd+K) and type a rough idea — no structure needed.",
+    title: "Describe What You Want",
+    description: "Quick Capture (Cmd+K) or create a story manually. Just type your idea — no structure needed.",
     color: "from-amber-500 to-orange-500",
   },
   {
@@ -18,25 +18,32 @@ const steps = [
     color: "from-violet-500 to-purple-500",
   },
   {
-    icon: Layout,
-    title: "Plan on the Board",
+    icon: Bot,
+    title: "Agent Picks It Up",
     description:
-      "Drag stories across your Kanban board. Set dependencies, attach files, assign sprints, and prioritize.",
+      "Choose your provider — Claude, OpenAI, or Ollama. Your AI agent claims the story and creates a branch.",
     color: "from-blue-500 to-cyan-500",
   },
   {
-    icon: Rocket,
-    title: "Agent Ships It",
+    icon: GitCompare,
+    title: "Agent Writes Code",
     description:
-      "Claude Code picks up the story, creates a branch, writes the code, and opens a live preview.",
+      "The agent writes code on a feature branch. Track token costs and progress in real time.",
     color: "from-emerald-500 to-green-500",
   },
   {
-    icon: CheckCircle2,
-    title: "Review & Approve",
+    icon: ShieldCheck,
+    title: "Trust Gate Review",
     description:
-      "Review the agent's work, approve to merge, or revert and re-trigger. Ship with confidence.",
+      "Review the diff with built-in risk detection for secrets, XSS, eval, and raw SQL. Nothing merges without your approval.",
     color: "from-pink-500 to-rose-500",
+  },
+  {
+    icon: RefreshCw,
+    title: "Ship or Iterate",
+    description:
+      "Approve to merge and ship — or reject with feedback. The agent learns from your review patterns.",
+    color: "from-cyan-500 to-teal-500",
   },
 ];
 
@@ -73,7 +80,7 @@ export function HowItWorks() {
             From idea to shipped code
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-            Five steps. No prompt engineering. No boilerplate.
+            Six steps. No prompt engineering. No boilerplate. Full human control.
           </p>
         </motion.div>
 
@@ -87,7 +94,7 @@ export function HowItWorks() {
           {/* Connecting line — desktop */}
           <div className="absolute left-0 right-0 top-16 hidden h-px bg-gradient-to-r from-transparent via-border to-transparent lg:block" />
 
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {steps.map((step, i) => (
               <motion.div key={step.title} variants={item} className="relative text-center">
                 {/* Step number circle */}
