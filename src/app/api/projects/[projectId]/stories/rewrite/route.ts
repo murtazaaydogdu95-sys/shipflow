@@ -7,7 +7,7 @@ import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { rewriteStorySchema } from "@/lib/validations/story";
 import { rewriteWithAI } from "@/lib/ai-rewrite";
 import { checkRewriteLimit } from "@/lib/plan-limits";
-import { PLAN_LIMITS } from "@/lib/paddle";
+import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
 import { parseJsonBody, sanitizeError } from "@/lib/api-error";
 import { safeDecrypt } from "@/lib/encryption";
 import { aiRateLimit } from "@/lib/rate-limit";

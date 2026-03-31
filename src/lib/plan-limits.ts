@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/paddle";
+import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
 
 type LimitResult = { allowed: true } | { allowed: false; message: string };
 

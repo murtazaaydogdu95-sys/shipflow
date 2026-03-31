@@ -3,7 +3,7 @@ import { mockPrisma, resetAllMocks, makeStoryData, makeProjectData } from "@/tes
 
 // ── Mocks ────────────────────────────────────────────────────
 vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
-vi.mock("@/lib/paddle", () => ({
+vi.mock("@/lib/lemonsqueezy", () => ({
   PLAN_LIMITS: {
     FREE: { maxConcurrentAgents: 1 },
     PRO: { maxConcurrentAgents: 3 },

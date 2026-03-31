@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyWebhookSignature, resolvePlanFromPriceId } from "@/lib/paddle";
+import { verifyWebhookSignature, resolvePlanFromVariantId } from "@/lib/lemonsqueezy";
 
 export async function POST(req: Request) {
-  const secret = process.env.PADDLE_WEBHOOK_SECRET;
+  const secret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
   if (!secret) {
     return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
   }
@@ -17,7 +17,8 @@ export async function POST(req: Request) {
   if (rawBody.length > 1_048_576) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 });
   }
-  const signature = req.headers.get("paddle-signature") || "";
+
+  const signature = req.headers.get("x-signature") || "";
 
   if (!verifyWebhookSignature(rawBody, signature)) {
     console.error("[billing-webhook] Signature verification failed");
@@ -25,27 +26,26 @@ export async function POST(req: Request) {
   }
 
   const body = JSON.parse(rawBody);
-  const eventType: string = body.event_type;
+  const eventName: string = body.meta?.event_name || "";
   const data = body.data;
 
-  if (!eventType || !data) {
+  if (!eventName || !data) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const customData = data.custom_data;
-  console.log("[billing-webhook] Event:", eventType, "custom_data:", JSON.stringify(customData));
+  const customData = body.meta?.custom_data;
+  console.log("[billing-webhook] Event:", eventName, "custom_data:", JSON.stringify(customData));
 
-  const orgId: string | undefined = customData?.orgId || customData?.org_id;
-  const userId: string | undefined = customData?.userId || customData?.user_id;
+  const orgId: string | undefined = customData?.org_id;
   const subscriptionId = data.id ? String(data.id) : "";
-  const customerId = data.customer_id ? String(data.customer_id) : "";
-  const status: string = data.status ?? "";
+  const customerId = data.attributes?.customer_id ? String(data.attributes.customer_id) : "";
+  const status: string = data.attributes?.status ?? "";
 
-  // Resolve price ID from subscription items
-  const priceId: string = data.items?.[0]?.price?.id ?? "";
-  const resolvedPlan = priceId ? resolvePlanFromPriceId(priceId) : "PRO";
+  // Resolve variant ID from subscription data
+  const variantId: string = data.attributes?.variant_id ? String(data.attributes.variant_id) : "";
+  const resolvedPlan = variantId ? resolvePlanFromVariantId(variantId) : "PRO";
 
-  // Resolve org: try custom_data first, then existing subscription, then userId, then customer email
+  // Resolve org: try custom_data first, then existing subscription, then customer ID
   let resolvedOrgId = orgId;
 
   if (!resolvedOrgId && subscriptionId) {
@@ -56,14 +56,6 @@ export async function POST(req: Request) {
     resolvedOrgId = existing?.orgId ?? undefined;
   }
 
-  if (!resolvedOrgId && userId) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { currentOrgId: true },
-    });
-    resolvedOrgId = user?.currentOrgId ?? undefined;
-  }
-
   if (!resolvedOrgId && customerId) {
     const org = await prisma.organization.findFirst({
       where: { paddleCustomerId: customerId },
@@ -72,15 +64,15 @@ export async function POST(req: Request) {
     resolvedOrgId = org?.id ?? undefined;
   }
 
-  switch (eventType) {
-    case "subscription.created": {
+  switch (eventName) {
+    case "subscription_created": {
       if (!resolvedOrgId) {
-        console.warn("[billing-webhook] No orgId in subscription.created");
+        console.warn("[billing-webhook] No orgId in subscription_created");
         return NextResponse.json({ received: true });
       }
 
-      const nextBilledAt = data.next_billed_at
-        ? new Date(data.next_billed_at)
+      const renewsAt = data.attributes?.renews_at
+        ? new Date(data.attributes.renews_at)
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       await prisma.subscription.upsert({
@@ -88,14 +80,14 @@ export async function POST(req: Request) {
         create: {
           orgId: resolvedOrgId,
           externalSubscriptionId: subscriptionId,
-          productId: priceId,
-          currentPeriodEnd: nextBilledAt,
+          productId: variantId,
+          currentPeriodEnd: renewsAt,
           status: "active",
         },
         update: {
           externalSubscriptionId: subscriptionId,
-          productId: priceId,
-          currentPeriodEnd: nextBilledAt,
+          productId: variantId,
+          currentPeriodEnd: renewsAt,
           status: "active",
         },
       });
@@ -110,22 +102,23 @@ export async function POST(req: Request) {
       break;
     }
 
-    case "subscription.updated": {
+    case "subscription_updated": {
       if (!resolvedOrgId) break;
 
-      const nextBilledAt = data.next_billed_at
-        ? new Date(data.next_billed_at)
+      const renewsAt = data.attributes?.renews_at
+        ? new Date(data.attributes.renews_at)
         : undefined;
 
       await prisma.subscription.updateMany({
         where: { orgId: resolvedOrgId },
         data: {
           status,
-          ...(nextBilledAt ? { currentPeriodEnd: nextBilledAt } : {}),
+          ...(variantId ? { productId: variantId } : {}),
+          ...(renewsAt ? { currentPeriodEnd: renewsAt } : {}),
         },
       });
 
-      // If status is active, sync plan from price ID
+      // If status is active, sync plan from variant ID
       if (status === "active") {
         await prisma.organization.update({
           where: { id: resolvedOrgId },
@@ -135,7 +128,7 @@ export async function POST(req: Request) {
       break;
     }
 
-    case "subscription.canceled": {
+    case "subscription_cancelled": {
       if (!resolvedOrgId) break;
 
       await prisma.subscription.deleteMany({
@@ -149,20 +142,22 @@ export async function POST(req: Request) {
       break;
     }
 
-    case "transaction.completed": {
+    case "subscription_payment_success": {
       if (!resolvedOrgId) break;
 
-      // Update currentPeriodEnd from billing period
-      const billingPeriodEnd = data.billing_period?.ends_at;
-      if (billingPeriodEnd) {
+      // Update currentPeriodEnd from renewal date
+      const renewsAt = data.attributes?.renews_at;
+      if (renewsAt) {
         await prisma.subscription.updateMany({
           where: { orgId: resolvedOrgId },
           data: {
-            currentPeriodEnd: new Date(billingPeriodEnd),
+            currentPeriodEnd: new Date(renewsAt),
             status: "active",
           },
         });
       }
+
+      console.log("[billing-webhook] Payment success for org:", resolvedOrgId);
       break;
     }
   }

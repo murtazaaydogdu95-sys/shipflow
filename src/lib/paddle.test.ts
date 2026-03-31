@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createHmac } from "crypto";
-import { verifyWebhookSignature, resolvePlanFromPriceId, PLAN_LIMITS } from "./paddle";
+import { verifyWebhookSignature, resolvePlanFromVariantId, PLAN_LIMITS } from "./lemonsqueezy";
 
-describe("paddle", () => {
+describe("lemonsqueezy", () => {
   describe("PLAN_LIMITS", () => {
     it("has FREE, PRO, and PRO_MAX plans", () => {
       expect(PLAN_LIMITS).toHaveProperty("FREE");
@@ -42,106 +42,83 @@ describe("paddle", () => {
     const TEST_SECRET = "test-webhook-secret-123";
 
     beforeEach(() => {
-      process.env.PADDLE_WEBHOOK_SECRET = TEST_SECRET;
+      process.env.LEMONSQUEEZY_WEBHOOK_SECRET = TEST_SECRET;
     });
 
     afterEach(() => {
-      delete process.env.PADDLE_WEBHOOK_SECRET;
+      delete process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
     });
 
-    function createSignature(body: string, ts: string, secret: string): string {
-      const payload = `${ts}:${body}`;
-      const hmac = createHmac("sha256", secret).update(payload).digest("hex");
-      return `ts=${ts};h1=${hmac}`;
+    function createSignature(body: string, secret: string): string {
+      return createHmac("sha256", secret).update(body).digest("hex");
     }
 
     it("returns true for valid signature", () => {
-      const body = '{"event":"subscription.created"}';
-      const ts = "1234567890";
-      const sig = createSignature(body, ts, TEST_SECRET);
+      const body = '{"meta":{"event_name":"subscription_created"}}';
+      const sig = createSignature(body, TEST_SECRET);
 
       expect(verifyWebhookSignature(body, sig)).toBe(true);
     });
 
     it("returns false for invalid signature", () => {
-      const body = '{"event":"subscription.created"}';
-      const sig = "ts=1234567890;h1=invalidsignature";
+      const body = '{"meta":{"event_name":"subscription_created"}}';
+      const sig = "invalidsignature";
 
       expect(verifyWebhookSignature(body, sig)).toBe(false);
     });
 
     it("returns false for tampered body", () => {
-      const originalBody = '{"event":"subscription.created"}';
-      const ts = "1234567890";
-      const sig = createSignature(originalBody, ts, TEST_SECRET);
+      const originalBody = '{"meta":{"event_name":"subscription_created"}}';
+      const sig = createSignature(originalBody, TEST_SECRET);
 
-      const tamperedBody = '{"event":"subscription.cancelled"}';
+      const tamperedBody = '{"meta":{"event_name":"subscription_cancelled"}}';
       expect(verifyWebhookSignature(tamperedBody, sig)).toBe(false);
     });
 
     it("returns false for wrong secret", () => {
-      const body = '{"event":"test"}';
-      const ts = "1234567890";
-      const sig = createSignature(body, ts, "wrong-secret");
+      const body = '{"meta":{"event_name":"test"}}';
+      const sig = createSignature(body, "wrong-secret");
 
       expect(verifyWebhookSignature(body, sig)).toBe(false);
     });
 
-    it("returns false when PADDLE_WEBHOOK_SECRET is not set", () => {
-      delete process.env.PADDLE_WEBHOOK_SECRET;
+    it("returns false when LEMONSQUEEZY_WEBHOOK_SECRET is not set", () => {
+      delete process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
 
-      const body = '{"event":"test"}';
-      const sig = "ts=123;h1=abc";
+      const body = '{"meta":{"event_name":"test"}}';
+      const sig = "abc123";
 
       expect(verifyWebhookSignature(body, sig)).toBe(false);
-    });
-
-    it("returns false for missing ts in signature", () => {
-      expect(verifyWebhookSignature("body", "h1=somehash")).toBe(false);
-    });
-
-    it("returns false for missing h1 in signature", () => {
-      expect(verifyWebhookSignature("body", "ts=123456")).toBe(false);
     });
 
     it("returns false for empty signature string", () => {
       expect(verifyWebhookSignature("body", "")).toBe(false);
     });
-
-    it("handles signature with extra fields", () => {
-      const body = '{"event":"test"}';
-      const ts = "1234567890";
-      const sig = createSignature(body, ts, TEST_SECRET);
-      // Add extra field
-      const extendedSig = sig + ";extra=value";
-
-      expect(verifyWebhookSignature(body, extendedSig)).toBe(true);
-    });
   });
 
-  describe("resolvePlanFromPriceId", () => {
+  describe("resolvePlanFromVariantId", () => {
     afterEach(() => {
-      delete process.env.PADDLE_PRO_MAX_PRICE_ID;
+      delete process.env.LS_VARIANT_ID_PRO_MAX;
     });
 
-    it("returns PRO for any price ID when PRO_MAX price is not configured", () => {
-      delete process.env.PADDLE_PRO_MAX_PRICE_ID;
-      expect(resolvePlanFromPriceId("pri_12345")).toBe("PRO");
+    it("returns PRO for any variant ID when PRO_MAX variant is not configured", () => {
+      delete process.env.LS_VARIANT_ID_PRO_MAX;
+      expect(resolvePlanFromVariantId("12345")).toBe("PRO");
     });
 
-    it("returns PRO_MAX when price ID matches PRO_MAX price", () => {
-      process.env.PADDLE_PRO_MAX_PRICE_ID = "pri_promax_123";
-      expect(resolvePlanFromPriceId("pri_promax_123")).toBe("PRO_MAX");
+    it("returns PRO_MAX when variant ID matches PRO_MAX variant", () => {
+      process.env.LS_VARIANT_ID_PRO_MAX = "variant_promax_123";
+      expect(resolvePlanFromVariantId("variant_promax_123")).toBe("PRO_MAX");
     });
 
-    it("returns PRO when price ID does not match PRO_MAX price", () => {
-      process.env.PADDLE_PRO_MAX_PRICE_ID = "pri_promax_123";
-      expect(resolvePlanFromPriceId("pri_other_456")).toBe("PRO");
+    it("returns PRO when variant ID does not match PRO_MAX variant", () => {
+      process.env.LS_VARIANT_ID_PRO_MAX = "variant_promax_123";
+      expect(resolvePlanFromVariantId("variant_other_456")).toBe("PRO");
     });
 
-    it("returns PRO for empty string price ID", () => {
-      process.env.PADDLE_PRO_MAX_PRICE_ID = "pri_promax_123";
-      expect(resolvePlanFromPriceId("")).toBe("PRO");
+    it("returns PRO for empty string variant ID", () => {
+      process.env.LS_VARIANT_ID_PRO_MAX = "variant_promax_123";
+      expect(resolvePlanFromVariantId("")).toBe("PRO");
     });
   });
 });

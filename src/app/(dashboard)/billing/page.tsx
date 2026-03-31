@@ -2,28 +2,12 @@
 
 import { useSession } from "next-auth/react";
 import posthog from "posthog-js";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { PricingCard } from "@/components/billing/pricing-card";
 import { Button } from "@/components/ui/button";
 import { DeleteAccountDialog } from "@/components/account/delete-account-dialog";
 import useSWR from "swr";
 import { cn } from "@/lib/utils";
-
-declare global {
-  interface Window {
-    Paddle?: {
-      Initialize: (config: { token: string; environment?: string }) => void;
-      Checkout: {
-        open: (config: {
-          items: { priceId: string; quantity: number }[];
-          customer?: { email: string };
-          customData?: Record<string, string>;
-          settings?: { successUrl?: string };
-        }) => void;
-      };
-    };
-  }
-}
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -61,11 +45,6 @@ function UsageBar({ label, used, limit }: { label: string; used: number; limit: 
   );
 }
 
-const PADDLE_CLIENT_TOKEN = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || "";
-const PADDLE_ENVIRONMENT = process.env.NEXT_PUBLIC_PADDLE_ENVIRONMENT || "sandbox";
-const PADDLE_PRO_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRO_PRICE_ID || "";
-const PADDLE_PRO_MAX_PRICE_ID = process.env.NEXT_PUBLIC_PADDLE_PRO_MAX_PRICE_ID || "";
-
 export default function BillingPage() {
   const { data: session } = useSession();
   const orgId = session?.user?.orgId;
@@ -75,55 +54,20 @@ export default function BillingPage() {
   const isOwner = org?.role === "OWNER";
   const [loading, setLoading] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
-  const [paddleReady, setPaddleReady] = useState(false);
 
-  useEffect(() => {
-    if (!PADDLE_CLIENT_TOKEN) return;
-
-    const init = () => {
-      if (window.Paddle) {
-        window.Paddle.Initialize({
-          token: PADDLE_CLIENT_TOKEN,
-          environment: PADDLE_ENVIRONMENT,
-        });
-        setPaddleReady(true);
-      }
-    };
-
-    if (window.Paddle) {
-      init();
-    } else {
-      // Wait for Paddle.js to load
-      const interval = setInterval(() => {
-        if (window.Paddle) {
-          init();
-          clearInterval(interval);
-        }
-      }, 200);
-      return () => clearInterval(interval);
-    }
-  }, []);
-
-  function handleUpgrade(targetPlan: "PRO" | "PRO_MAX" = "PRO") {
-    if (!window.Paddle || !paddleReady) return;
-
-    const priceId = targetPlan === "PRO_MAX" ? PADDLE_PRO_MAX_PRICE_ID : PADDLE_PRO_PRICE_ID;
-    if (!priceId) return;
-
+  async function handleUpgrade(targetPlan: "PRO" | "PRO_MAX" = "PRO") {
     setLoading(true);
     posthog.capture("upgrade_initiated", { targetPlan, currentPlan: plan });
     try {
-      window.Paddle.Checkout.open({
-        items: [{ priceId, quantity: 1 }],
-        customer: { email: session?.user?.email || "" },
-        customData: {
-          orgId: orgId || "",
-          userId: session?.user?.id || "",
-        },
-        settings: {
-          successUrl: `${window.location.origin}/billing?success=true`,
-        },
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planId: targetPlan }),
       });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
     } finally {
       setLoading(false);
     }

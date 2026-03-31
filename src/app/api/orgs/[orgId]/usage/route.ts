@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/paddle";
+import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
 
 export async function GET(
   req: Request,

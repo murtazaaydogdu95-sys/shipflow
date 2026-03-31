@@ -115,7 +115,7 @@ export async function POST(
         select: { plan: true },
       });
 
-      const { PLAN_LIMITS } = await import("@/lib/paddle");
+      const { PLAN_LIMITS } = await import("@/lib/lemonsqueezy");
       const plan = (orgData?.plan ?? "FREE") as keyof typeof PLAN_LIMITS;
       const maxAgents = PLAN_LIMITS[plan]?.maxConcurrentAgents ?? PLAN_LIMITS.FREE.maxConcurrentAgents;
 

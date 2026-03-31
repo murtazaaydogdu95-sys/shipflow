@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { PLAN_LIMITS } from "@/lib/paddle";
+import { PLAN_LIMITS } from "@/lib/lemonsqueezy";
 
 export const PRIORITY_ORDER: Record<string, number> = {
   CRITICAL: 0,

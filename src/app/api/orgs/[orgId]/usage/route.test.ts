@@ -8,7 +8,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 
 // Mock paddle module — only PLAN_LIMITS is used
-vi.mock("@/lib/paddle", () => ({
+vi.mock("@/lib/lemonsqueezy", () => ({
   PLAN_LIMITS: {
     FREE: {
       maxProjects: 3,
@@ -21,8 +21,7 @@ vi.mock("@/lib/paddle", () => ({
       maxAIRewritesPerMonth: 50,
     },
   },
-  paddleEnabled: false,
-  paddle: null,
+  lemonSqueezyEnabled: false,
 }));
 
 import { GET } from "./route";
