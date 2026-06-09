@@ -11,9 +11,9 @@ test.describe("Account Settings @medium", () => {
     await expect(nameInput).toBeVisible({ timeout: 10000 });
     await expect(emailDisplay).toBeVisible();
 
-    // Should show the current user's info
+    // Should show the current user's info (email is a readonly <input>, so assert value)
     await expect(nameInput).toHaveValue(TEST_USER.name);
-    await expect(emailDisplay).toContainText(TEST_USER.email);
+    await expect(emailDisplay).toHaveValue(TEST_USER.email);
   });
 
   test("can update profile name", async ({ authenticatedPage: page }) => {
@@ -51,7 +51,10 @@ test.describe("Account Settings @medium", () => {
     }).toPass({ timeout: 5000 });
   });
 
-  test("security page shows password change section", async ({ authenticatedPage: page }) => {
+  // SKIP: the security page only has a Two-Factor section — there is no in-app
+  // password-change feature (only the forgot-password email reset flow). Re-enable
+  // this test if/when a "change password" section is added to /account/security.
+  test.skip("security page shows password change section", async ({ authenticatedPage: page }) => {
     await page.goto("/account/security");
 
     await expect(page.getByText(/password/i).first()).toBeVisible({ timeout: 10000 });
@@ -75,7 +78,7 @@ test.describe("Account Settings @medium", () => {
 
   test("can toggle email notifications", async ({ authenticatedPage: page }) => {
     let patchCalled = false;
-    await page.route("**/api/account/notifications", (route) => {
+    await page.route("**/api/account/notification-preferences", (route) => {
       if (route.request().method() === "PATCH") {
         patchCalled = true;
         return route.fulfill({
