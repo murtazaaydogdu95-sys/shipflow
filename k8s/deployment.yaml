@@ -49,6 +49,8 @@ spec:
               value: "https://codepylot.aydex.nl"
             - name: CODEPYLOT_REPOS_DIR
               value: "/app/repos"
+            - name: OLLAMA_URL
+              value: "http://ollama:11434/v1" # in-cluster Ollama (k8s/ollama.yaml)
           envFrom:
             - secretRef:
                 name: codepylot-secret # DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY, CRON_SECRET, OAuth, ...

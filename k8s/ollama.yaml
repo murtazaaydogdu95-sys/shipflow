@@ -1,0 +1,102 @@
+# In-cluster Ollama for the "Ollama (Local)" AI provider (story rewriting).
+# The app reaches it at http://ollama:11434 — set OLLAMA_URL=http://ollama:11434/v1
+# on the app deployment (OpenAI-compatible endpoint).
+#
+# NOTE: CPU inference is slow and memory-hungry. llama3.2 (3B) needs ~4Gi RAM.
+# Models persist on the PVC, so the postStart `ollama pull` is a no-op after the
+# first download. Adjust resources to fit your VPS.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codepylot-ollama
+  namespace: codepylot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 15Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codepylot-ollama
+  namespace: codepylot
+  labels:
+    app: codepylot-ollama
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate # single RWO model volume
+  selector:
+    matchLabels:
+      app: codepylot-ollama
+  template:
+    metadata:
+      labels:
+        app: codepylot-ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - name: http
+              containerPort: 11434
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+          # After the server starts, pull the model (idempotent; cached on the PVC).
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - "sleep 5; ollama pull llama3.2 || true"
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 6Gi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: codepylot-ollama
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: codepylot
+  labels:
+    app: codepylot-ollama
+spec:
+  type: ClusterIP
+  selector:
+    app: codepylot-ollama
+  ports:
+    - name: http
+      port: 11434
+      targetPort: http
+      protocol: TCP
