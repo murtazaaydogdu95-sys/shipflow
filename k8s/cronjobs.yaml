@@ -30,7 +30,7 @@ spec:
                       key: CRON_SECRET
               command: ["/bin/sh", "-c"]
               args:
-                - 'curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/scheduler'
+                - 'curl -sf -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/scheduler'
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { cpu: 50m, memory: 32Mi }
