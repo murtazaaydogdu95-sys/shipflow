@@ -17,6 +17,11 @@ export const createAgentSchema = z.object({
     temperature: z.number().min(0).max(2).optional(),
     maxTokens: z.number().int().positive().optional(),
     systemPrompt: z.string().max(5000).optional(),
+    // BYOK credentials (encrypted at rest; never returned to the client).
+    // apiKey: Anthropic/OpenAI key; oauthToken: Claude subscription token.
+    apiKey: z.string().max(500).optional(),
+    oauthToken: z.string().max(2000).optional(),
+    baseUrl: z.string().url().max(500).optional(),
   }).optional(),
   reportsTo: z.string().cuid().optional(),
 });

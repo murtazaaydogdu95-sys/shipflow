@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { checkOrgPermission } from "@/lib/permissions";
 import { parseJsonBody, sanitizeError } from "@/lib/api-error";
 import { updateAgentSchema } from "@/lib/validations/agent";
+import { mergeAndEncryptAdapterConfig, redactAgent } from "@/lib/adapter-config";
 import { ZodError } from "zod";
 
 /**
@@ -85,7 +86,7 @@ export async function GET(
   });
 
   return NextResponse.json({
-    ...agent,
+    ...redactAgent(agent),
     costSummary: {
       totalCostCents: costSummary._sum.costCents ?? 0,
       totalInputTokens: costSummary._sum.inputTokens ?? 0,
@@ -175,7 +176,18 @@ export async function PATCH(
     if (data.icon !== undefined) updateData.icon = data.icon;
     if (data.capabilities !== undefined) updateData.capabilities = data.capabilities;
     if (data.adapterType !== undefined) updateData.adapterType = data.adapterType;
-    if (data.adapterConfig !== undefined) updateData.adapterConfig = data.adapterConfig as Prisma.InputJsonValue;
+    if (data.adapterConfig !== undefined) {
+      // Merge over the stored config and encrypt any newly provided secret fields
+      // so a partial update never wipes an existing key or stores one in plaintext.
+      const current = await prisma.agent.findUnique({
+        where: { id: agentId },
+        select: { adapterConfig: true },
+      });
+      updateData.adapterConfig = mergeAndEncryptAdapterConfig(
+        data.adapterConfig as Record<string, unknown>,
+        (current?.adapterConfig as Record<string, unknown> | null) ?? null
+      ) as Prisma.InputJsonValue;
+    }
     if (data.reportsTo !== undefined) updateData.reportsTo = data.reportsTo;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.pauseReason !== undefined) updateData.pauseReason = data.pauseReason;
@@ -188,7 +200,7 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json(agent);
+    return NextResponse.json(redactAgent(agent));
   } catch (err) {
     if (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "P2002") {
       return NextResponse.json(

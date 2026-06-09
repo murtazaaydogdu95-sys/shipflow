@@ -55,6 +55,7 @@ interface Agent {
   title: string | null;
   status: string;
   adapterType: string;
+  adapterConfig?: { apiKeySet?: boolean; oauthTokenSet?: boolean } | null;
   capabilities: string | null;
   storiesCompleted: number;
   totalCostCents: number;
@@ -238,6 +239,8 @@ export function AgentDetailClient({
   const [editTitle, setEditTitle] = useState("");
   const [editAdapter, setEditAdapter] = useState("");
   const [editCapabilities, setEditCapabilities] = useState("");
+  const [editApiKey, setEditApiKey] = useState("");
+  const [editOauthToken, setEditOauthToken] = useState("");
   const [formInitialized, setFormInitialized] = useState(false);
 
   // Initialize form when agent data loads
@@ -264,6 +267,15 @@ export function AgentDetailClient({
             title: editTitle.trim() || null,
             adapterType: editAdapter,
             capabilities: editCapabilities.trim() || null,
+            // Only send secrets the user actually typed; blank preserves the stored key.
+            ...((editApiKey.trim() || editOauthToken.trim())
+              ? {
+                  adapterConfig: {
+                    ...(editApiKey.trim() ? { apiKey: editApiKey.trim() } : {}),
+                    ...(editOauthToken.trim() ? { oauthToken: editOauthToken.trim() } : {}),
+                  },
+                }
+              : {}),
           }),
         }
       );
@@ -271,6 +283,8 @@ export function AgentDetailClient({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `HTTP ${res.status}`);
       }
+      setEditApiKey("");
+      setEditOauthToken("");
       await mutateAgent();
       toast.success("Agent updated");
     } catch (err) {
@@ -574,6 +588,59 @@ export function AgentDetailClient({
                   </SelectContent>
                 </Select>
               </div>
+              {(editAdapter === "claude" || editAdapter === "openai") && (
+                <div>
+                  <Label>
+                    API Key
+                    {agent.adapterConfig?.apiKeySet && (
+                      <span className="ml-2 text-xs text-green-500">✓ configured</span>
+                    )}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={editApiKey}
+                    onChange={(e) => setEditApiKey(e.target.value)}
+                    placeholder={
+                      agent.adapterConfig?.apiKeySet
+                        ? "Leave blank to keep current key"
+                        : editAdapter === "openai"
+                          ? "sk-..."
+                          : "sk-ant-..."
+                    }
+                    autoComplete="off"
+                    className="mt-1"
+                    disabled={isTerminated}
+                    data-testid="agent-edit-apikey"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Stored encrypted. Used for this agent&apos;s runs (bring your own key).
+                  </p>
+                </div>
+              )}
+              {editAdapter === "claude" && (
+                <div>
+                  <Label>
+                    Claude subscription token (optional)
+                    {agent.adapterConfig?.oauthTokenSet && (
+                      <span className="ml-2 text-xs text-green-500">✓ configured</span>
+                    )}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={editOauthToken}
+                    onChange={(e) => setEditOauthToken(e.target.value)}
+                    placeholder={
+                      agent.adapterConfig?.oauthTokenSet
+                        ? "Leave blank to keep current token"
+                        : "From `claude setup-token` (instead of an API key)"
+                    }
+                    autoComplete="off"
+                    className="mt-1"
+                    disabled={isTerminated}
+                    data-testid="agent-edit-oauth"
+                  />
+                </div>
+              )}
               <div>
                 <Label>Capabilities (optional)</Label>
                 <Textarea

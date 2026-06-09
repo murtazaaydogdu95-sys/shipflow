@@ -5,6 +5,7 @@ import path from "path";
 import { prisma } from "@/lib/prisma";
 import { claimAgentSlot } from "@/lib/agent-queue";
 import { getGoalContext } from "@/lib/goals";
+import { getAdapterCredentials } from "@/lib/adapter-config";
 
 export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -327,6 +328,13 @@ export async function spawnAgent({ storyId, projectId, agentId, feedback, onComp
   ].join(":");
   const fullPath = `${process.env.PATH || ""}:${extraPath}`;
 
+  // BYOK: per-agent Claude credentials (encrypted in adapterConfig), falling back
+  // to the platform-wide env vars when an agent has no key of its own.
+  const creds = getAdapterCredentials(agentRecord?.adapterConfig as Record<string, unknown> | null);
+  const spawnEnv: NodeJS.ProcessEnv = { ...process.env, PATH: fullPath };
+  if (creds.apiKey) spawnEnv.ANTHROPIC_API_KEY = creds.apiKey;
+  if (creds.oauthToken) spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = creds.oauthToken;
+
   // Spawn detached claude process with output logging
   const logPath = `/tmp/codepylot-agent-${storyId}.log`;
   let logFd: number;
@@ -349,7 +357,7 @@ export async function spawnAgent({ storyId, projectId, agentId, feedback, onComp
       detached: true,
       stdio: ["ignore", logFd, logFd],
       cwd: workingDir,
-      env: { ...process.env, PATH: fullPath },
+      env: spawnEnv,
     });
   } catch (err) {
     console.error(`[agent-executor] spawn() threw for ${story.shortId}:`, err);

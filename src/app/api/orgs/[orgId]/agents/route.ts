@@ -7,6 +7,7 @@ import { parseJsonBody, sanitizeError } from "@/lib/api-error";
 import { createAgentSchema } from "@/lib/validations/agent";
 import { checkAgentLimit } from "@/lib/plan-limits";
 import { createApproval } from "@/lib/approvals";
+import { mergeAndEncryptAdapterConfig, redactAgent, redactAdapterConfig } from "@/lib/adapter-config";
 import { ZodError } from "zod";
 
 export async function GET(
@@ -41,7 +42,7 @@ export async function GET(
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json(agents);
+  return NextResponse.json(agents.map(redactAgent));
 }
 
 export async function POST(
@@ -103,6 +104,9 @@ export async function POST(
   });
   const requiresApproval = org?.requireApprovalForAgents ?? false;
 
+  // Encrypt any BYOK secret fields before persisting.
+  const encryptedConfig = mergeAndEncryptAdapterConfig(data.adapterConfig ?? null, null);
+
   // Use serializable transaction to prevent plan limit bypass via concurrent requests
   try {
     const agent = await prisma.$transaction(async (tx) => {
@@ -132,7 +136,7 @@ export async function POST(
           icon: data.icon,
           capabilities: data.capabilities,
           adapterType: data.adapterType,
-          adapterConfig: data.adapterConfig ? (data.adapterConfig as Prisma.InputJsonValue) : undefined,
+          adapterConfig: encryptedConfig as Prisma.InputJsonValue | undefined,
           reportsTo: data.reportsTo,
           status: requiresApproval ? "pending_approval" : "idle",
         },
@@ -151,13 +155,13 @@ export async function POST(
           agentId: agent.id,
           agentName: data.name,
           agentRole: data.role,
-          agentConfig: data.adapterConfig ?? null,
+          agentConfig: redactAdapterConfig(encryptedConfig ?? null),
         },
         requestedById: session.user.id,
       });
     }
 
-    return NextResponse.json(agent, { status: 201 });
+    return NextResponse.json(redactAgent(agent), { status: 201 });
   } catch (err) {
     if (err instanceof Error && err.message === "AGENT_LIMIT_REACHED") {
       return NextResponse.json(

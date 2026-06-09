@@ -4,6 +4,7 @@ import { homedir } from "os";
 import path from "path";
 import type { AgentAdapter, AdapterInvokeParams, AdapterResult } from "./types";
 import { getClaudeBin } from "@/lib/agent-executor";
+import { getAdapterCredentials } from "@/lib/adapter-config";
 
 export class ClaudeAdapter implements AgentAdapter {
   type = "claude";
@@ -20,6 +21,12 @@ export class ClaudeAdapter implements AgentAdapter {
       "/opt/homebrew/bin",
     ].join(":");
     const fullPath = `${process.env.PATH || ""}:${extraPath}`;
+
+    // BYOK: per-agent Claude credentials, falling back to platform env vars.
+    const creds = getAdapterCredentials(params.agent.adapterConfig as Record<string, unknown> | null);
+    const spawnEnv: NodeJS.ProcessEnv = { ...process.env, PATH: fullPath };
+    if (creds.apiKey) spawnEnv.ANTHROPIC_API_KEY = creds.apiKey;
+    if (creds.oauthToken) spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = creds.oauthToken;
 
     // Open log file for output
     const logPath = `/tmp/codepylot-agent-${params.story.id}.log`;
@@ -51,7 +58,7 @@ export class ClaudeAdapter implements AgentAdapter {
             detached: true,
             stdio: ["ignore", logFd, logFd],
             cwd: params.workingDir,
-            env: { ...process.env, PATH: fullPath },
+            env: spawnEnv,
           }
         );
       } catch (err) {
