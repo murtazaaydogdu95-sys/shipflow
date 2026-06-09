@@ -190,7 +190,14 @@ jobs:
 
             # Postgres first (the app waits for it on startup)
             kubectl apply -f ~/shipflow/k8s/postgres.yaml
-            kubectl -n codepylot rollout status deploy/codepylot-postgres --timeout=3m || { dump codepylot-postgres; exit 1; }
+            # If the rollout stalls, the running pod may predate the current Secret
+            # (env from a Secret is baked in at pod creation). Restart once to force a
+            # fresh pod that re-reads the Secret, then wait again before giving up.
+            if ! kubectl -n codepylot rollout status deploy/codepylot-postgres --timeout=2m; then
+              echo 'postgres not ready — restarting to pick up the current secret…'
+              kubectl -n codepylot rollout restart deploy/codepylot-postgres
+              kubectl -n codepylot rollout status deploy/codepylot-postgres --timeout=3m || { dump codepylot-postgres; exit 1; }
+            fi
 
             # Apply the rest (deployment, service, ingress, cronjobs)
             kubectl apply -f ~/shipflow/k8s/
