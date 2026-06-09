@@ -37,9 +37,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install git (needed for GitHub import clone) and prisma CLI + tsx for entrypoint
+# Install git (GitHub import clone), prisma CLI + tsx (entrypoint), and the
+# Claude Code CLI (used by the "claude" agent adapter to run coding agents)
 RUN apk add --no-cache git && \
-    npm install -g prisma@6 tsx
+    npm install -g prisma@6 tsx @anthropic-ai/claude-code
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
@@ -47,6 +48,11 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Create repos directory for GitHub imports
 RUN mkdir -p /app/repos && chown nextjs:nodejs /app/repos
+
+# Writable HOME for the non-root user — git config (--global) and the Claude CLI
+# (~/.claude) both need it at runtime
+RUN mkdir -p /home/nextjs/.claude && chown -R nextjs:nodejs /home/nextjs
+ENV HOME=/home/nextjs
 
 # Copy standalone output
 COPY --from=builder /app/.next/standalone ./
