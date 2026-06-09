@@ -98,26 +98,26 @@ describe("lemonsqueezy", () => {
 
   describe("resolvePlanFromVariantId", () => {
     afterEach(() => {
-      delete process.env.LS_VARIANT_ID_PRO_MAX;
+      delete process.env.LEMONSQUEEZY_VARIANT_ID_PRO_MAX;
     });
 
     it("returns PRO for any variant ID when PRO_MAX variant is not configured", () => {
-      delete process.env.LS_VARIANT_ID_PRO_MAX;
+      delete process.env.LEMONSQUEEZY_VARIANT_ID_PRO_MAX;
       expect(resolvePlanFromVariantId("12345")).toBe("PRO");
     });
 
     it("returns PRO_MAX when variant ID matches PRO_MAX variant", () => {
-      process.env.LS_VARIANT_ID_PRO_MAX = "variant_promax_123";
+      process.env.LEMONSQUEEZY_VARIANT_ID_PRO_MAX = "variant_promax_123";
       expect(resolvePlanFromVariantId("variant_promax_123")).toBe("PRO_MAX");
     });
 
     it("returns PRO when variant ID does not match PRO_MAX variant", () => {
-      process.env.LS_VARIANT_ID_PRO_MAX = "variant_promax_123";
+      process.env.LEMONSQUEEZY_VARIANT_ID_PRO_MAX = "variant_promax_123";
       expect(resolvePlanFromVariantId("variant_other_456")).toBe("PRO");
     });
 
     it("returns PRO for empty string variant ID", () => {
-      process.env.LS_VARIANT_ID_PRO_MAX = "variant_promax_123";
+      process.env.LEMONSQUEEZY_VARIANT_ID_PRO_MAX = "variant_promax_123";
       expect(resolvePlanFromVariantId("")).toBe("PRO");
     });
   });
