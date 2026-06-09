@@ -126,8 +126,9 @@ jobs:
           GITHUB_OAUTH_SECRET: ${{ secrets.OAUTH_GITHUB_SECRET }}
           GOOGLE_OAUTH_ID: ${{ secrets.OAUTH_GOOGLE_ID }}
           GOOGLE_OAUTH_SECRET: ${{ secrets.OAUTH_GOOGLE_SECRET }}
-          # Agent runtime: Claude CLI key + GitHub PAT for git pull/push
+          # Agent runtime: Claude auth (API key OR subscription OAuth token) + git PAT
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GIT_GITHUB_TOKEN: ${{ secrets.GIT_GITHUB_TOKEN }}
           # In-cluster Postgres credentials
           POSTGRES_USER: codepylot
@@ -163,6 +164,7 @@ jobs:
             GOOGLE_ID: $(printf '%s' "$GOOGLE_OAUTH_ID" | base64 | tr -d '\n')
             GOOGLE_SECRET: $(printf '%s' "$GOOGLE_OAUTH_SECRET" | base64 | tr -d '\n')
             ANTHROPIC_API_KEY: $(printf '%s' "$ANTHROPIC_API_KEY" | base64 | tr -d '\n')
+            CLAUDE_CODE_OAUTH_TOKEN: $(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | base64 | tr -d '\n')
             GIT_GITHUB_TOKEN: $(printf '%s' "$GIT_GITHUB_TOKEN" | base64 | tr -d '\n')
             POSTGRES_USER: $(printf '%s' "$POSTGRES_USER" | base64 | tr -d '\n')
             POSTGRES_PASSWORD: $(printf '%s' "$POSTGRES_PASSWORD" | base64 | tr -d '\n')
