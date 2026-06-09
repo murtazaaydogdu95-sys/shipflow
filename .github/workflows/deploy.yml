@@ -205,6 +205,11 @@ jobs:
             # Pin to the freshly built image SHA — gives proper rollback support
             kubectl -n codepylot set image deploy/codepylot web=${{ steps.img.outputs.ref }}
 
+            # Always restart so the app picks up any changed Secret values (env from a
+            # Secret is baked in at pod creation; set image to an unchanged SHA is a no-op).
+            # Zero-downtime: the deployment uses maxUnavailable=0, maxSurge=1.
+            kubectl -n codepylot rollout restart deploy/codepylot
+
             # Wait for new pods to come up
             kubectl -n codepylot rollout status deploy/codepylot --timeout=5m || { dump codepylot; exit 1; }
           "
