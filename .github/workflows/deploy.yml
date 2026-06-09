@@ -206,14 +206,14 @@ jobs:
         run: |
           # First deploy: cert may take 30–90s to issue. Retry for up to 3 min.
           for i in $(seq 1 18); do
-            code=$(curl -sS -o /dev/null -w "%{http_code}" -L https://app.codepylot.dev/api/health || true)
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -L https://codepylot.aydex.nl/api/health || true)
             if [ "$code" = "200" ]; then
-              echo "✓ app.codepylot.dev/api/health returned 200"
+              echo "✓ codepylot.aydex.nl/api/health returned 200"
               exit 0
             fi
             echo "Attempt $i: got '$code', retrying in 10s…"
             sleep 10
           done
-          echo "✗ app.codepylot.dev did not return 200 within 3 minutes"
+          echo "✗ codepylot.aydex.nl did not return 200 within 3 minutes"
           echo "Cert may still be issuing — check: kubectl describe certificate codepylot-tls -n codepylot"
           exit 1

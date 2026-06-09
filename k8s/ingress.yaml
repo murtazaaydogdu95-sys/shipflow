@@ -9,10 +9,10 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - app.codepylot.dev
+        - codepylot.aydex.nl
       secretName: codepylot-tls
   rules:
-    - host: app.codepylot.dev
+    - host: codepylot.aydex.nl
       http:
         paths:
           - path: /

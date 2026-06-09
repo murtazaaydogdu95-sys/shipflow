@@ -44,9 +44,9 @@ spec:
             - name: AUTH_TRUST_HOST
               value: "true"
             - name: NEXTAUTH_URL
-              value: "https://app.codepylot.dev"
+              value: "https://codepylot.aydex.nl"
             - name: NEXT_PUBLIC_APP_URL
-              value: "https://app.codepylot.dev"
+              value: "https://codepylot.aydex.nl"
             - name: CODEPYLOT_REPOS_DIR
               value: "/app/repos"
           envFrom:
