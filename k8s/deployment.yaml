@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codepylot
+  namespace: codepylot
+  labels:
+    app: codepylot
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: codepylot
+  template:
+    metadata:
+      labels:
+        app: codepylot
+    spec:
+      imagePullSecrets:
+        - name: ghcr-login-secret
+      # fsGroup so the mounted repos volume is writable by the non-root user
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: web
+          # `kubectl set image` pins this to the freshly built SHA on every deploy
+          image: ghcr.io/murtazaaydogdu95-sys/shipflow:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: AUTH_TRUST_HOST
+              value: "true"
+            - name: NEXTAUTH_URL
+              value: "https://app.codepylot.dev"
+            - name: NEXT_PUBLIC_APP_URL
+              value: "https://app.codepylot.dev"
+            - name: CODEPYLOT_REPOS_DIR
+              value: "/app/repos"
+          envFrom:
+            - secretRef:
+                name: codepylot-secret # DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY, CRON_SECRET, OAuth, ...
+          volumeMounts:
+            - name: repos
+              mountPath: /app/repos
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+            # Not read-only: the entrypoint runs `prisma db push` and git clones into /app/repos
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: repos
+          persistentVolumeClaim:
+            claimName: codepylot-repos
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codepylot-repos
+  namespace: codepylot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi

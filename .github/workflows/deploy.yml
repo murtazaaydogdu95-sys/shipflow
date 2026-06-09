@@ -1,48 +1,42 @@
-name: Deploy
+name: Build & deploy
 
 on:
   push:
     branches: [main]
     paths-ignore:
-      - "docs/**"
       - "**.md"
+      - ".gitignore"
+      - "docs/**"
       - ".github/workflows/ci.yml"
-  workflow_dispatch:  # Allow manual deploys from GitHub UI
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # ── Step 1: Run tests before deploying ─────────────────────
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run test
-
-  # ── Step 2: Build and push Docker image ────────────────────
   build:
+    name: Build & push image
     runs-on: ubuntu-latest
-    needs: test
     permissions:
       contents: read
       packages: write
-
     outputs:
-      image-tag: ${{ steps.meta.outputs.version }}
-      image-digest: ${{ steps.build.outputs.digest }}
-
+      sha-short: ${{ steps.sha.outputs.short }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -55,146 +49,153 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,format=short
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push
-        id: build
+      - name: Build & push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64
 
-  # ── Step 3: Deploy to Kubernetes ───────────────────────────
   deploy:
-    runs-on: ubuntu-latest
+    name: Deploy to k3s
     needs: build
-    environment: production
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
-
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+      - name: Resolve image reference
+        id: img
+        run: echo "ref=ghcr.io/${{ github.repository }}:sha-${{ needs.build.outputs.sha-short }}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
 
-      - name: Configure kubeconfig
+      - name: Trust VPS host key
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Verify cluster access
-        run: kubectl cluster-info
-
-      - name: Create namespace if needed
-        run: kubectl create namespace codepylot --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create image pull secret
+      - name: Sanity check — kubectl reachable on VPS
         run: |
-          kubectl -n codepylot create secret docker-registry ghcr-pull-secret \
-            --docker-server=${{ env.REGISTRY }} \
-            --docker-username=${{ github.actor }} \
-            --docker-password=${{ secrets.GITHUB_TOKEN }} \
-            --dry-run=client -o yaml | kubectl apply -f -
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" '
+            set -e
+            export KUBECONFIG=$HOME/.kube/config
+            command -v kubectl >/dev/null || { echo "kubectl not found in PATH"; exit 1; }
+            kubectl get nodes >/dev/null || { echo "kubectl cannot reach the cluster — check ~/.kube/config"; exit 1; }
+            echo "kubectl OK"
+          '
 
-      - name: Deploy with Helm
+      - name: Sync k8s manifests to VPS
         run: |
-          helm upgrade --install codepylot ./deploy/helm/codepylot \
-            --namespace codepylot \
-            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
-            --set image.tag=${{ github.sha }} \
-            --set image.pullPolicy=Always \
-            --set env.AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
-            --set env.ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}" \
-            --set env.CRON_SECRET="${{ secrets.CRON_SECRET }}" \
-            --set env.GITHUB_ID="${{ secrets.OAUTH_GITHUB_ID }}" \
-            --set env.GITHUB_SECRET="${{ secrets.OAUTH_GITHUB_SECRET }}" \
-            --set env.GOOGLE_ID="${{ secrets.OAUTH_GOOGLE_ID }}" \
-            --set env.GOOGLE_SECRET="${{ secrets.OAUTH_GOOGLE_SECRET }}" \
-            --set ingress.className=traefik \
-            --set ingress.annotations=null \
-            --set ingress.hosts[0].host="${{ vars.DOMAIN }}" \
-            --set ingress.hosts[0].paths[0].path=/ \
-            --set ingress.hosts[0].paths[0].pathType=Prefix \
-            --set ingress.tls[0].secretName=codepylot-tls \
-            --set ingress.tls[0].hosts[0]="${{ vars.DOMAIN }}" \
-            --set backup.enabled=false \
-            --set postgresql.storage.storageClass=local-path \
-            --set persistence.repos.storageClass=local-path \
-            --wait \
-            --timeout 10m \
-            --history-max 5
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" 'mkdir -p ~/shipflow/k8s'
+          scp -r k8s/. "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/shipflow/k8s/"
 
-      - name: Verify rollout
+      - name: Create namespace
         run: |
-          kubectl -n codepylot rollout status deployment/codepylot --timeout=3m
-          echo "--- Pods ---"
-          kubectl -n codepylot get pods -o wide
-          echo "--- Services ---"
-          kubectl -n codepylot get svc
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'export KUBECONFIG=$HOME/.kube/config && kubectl apply -f ~/shipflow/k8s/namespace.yaml'
 
-      - name: Post-deploy health check
+      - name: Create GHCR image pull secret
         run: |
-          # Wait for ingress to propagate
-          sleep 15
-          HEALTH_URL="https://${{ vars.DOMAIN }}/api/health"
-          for i in 1 2 3; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$HEALTH_URL" || echo "000")
-            if [ "$STATUS" = "200" ]; then
-              echo "Health check passed on attempt $i!"
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "
+            export KUBECONFIG=\$HOME/.kube/config
+            kubectl -n codepylot create secret docker-registry ghcr-login-secret \
+              --docker-server=ghcr.io \
+              --docker-username='${{ github.actor }}' \
+              --docker-password='${{ secrets.GITHUB_TOKEN }}' \
+              --dry-run=client -o yaml | kubectl apply -f -
+          "
+
+      - name: Sync runtime secrets to cluster
+        env:
+          # Application secrets
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          GITHUB_OAUTH_ID: ${{ secrets.OAUTH_GITHUB_ID }}
+          GITHUB_OAUTH_SECRET: ${{ secrets.OAUTH_GITHUB_SECRET }}
+          GOOGLE_OAUTH_ID: ${{ secrets.OAUTH_GOOGLE_ID }}
+          GOOGLE_OAUTH_SECRET: ${{ secrets.OAUTH_GOOGLE_SECRET }}
+          # In-cluster Postgres credentials
+          POSTGRES_USER: codepylot
+          POSTGRES_DB: codepylot
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          # Build DATABASE_URL pointing at the in-cluster postgres Service
+          DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+
+          # Build the Secret YAML on the runner (values never appear in process listings)
+          umask 077
+          cat > /tmp/codepylot-secrets.yaml <<EOF
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: codepylot-secret
+            namespace: codepylot
+          type: Opaque
+          data:
+            DATABASE_URL: $(printf '%s' "$DATABASE_URL" | base64 | tr -d '\n')
+            AUTH_SECRET: $(printf '%s' "$AUTH_SECRET" | base64 | tr -d '\n')
+            ENCRYPTION_KEY: $(printf '%s' "$ENCRYPTION_KEY" | base64 | tr -d '\n')
+            CRON_SECRET: $(printf '%s' "$CRON_SECRET" | base64 | tr -d '\n')
+            GITHUB_ID: $(printf '%s' "$GITHUB_OAUTH_ID" | base64 | tr -d '\n')
+            GITHUB_SECRET: $(printf '%s' "$GITHUB_OAUTH_SECRET" | base64 | tr -d '\n')
+            GOOGLE_ID: $(printf '%s' "$GOOGLE_OAUTH_ID" | base64 | tr -d '\n')
+            GOOGLE_SECRET: $(printf '%s' "$GOOGLE_OAUTH_SECRET" | base64 | tr -d '\n')
+            POSTGRES_USER: $(printf '%s' "$POSTGRES_USER" | base64 | tr -d '\n')
+            POSTGRES_PASSWORD: $(printf '%s' "$POSTGRES_PASSWORD" | base64 | tr -d '\n')
+            POSTGRES_DB: $(printf '%s' "$POSTGRES_DB" | base64 | tr -d '\n')
+          EOF
+
+          # Pipe through SSH stdin into kubectl apply — no temp file lands on the VPS
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            'export KUBECONFIG=$HOME/.kube/config && kubectl apply -f -' \
+            < /tmp/codepylot-secrets.yaml
+
+          rm /tmp/codepylot-secrets.yaml
+
+      - name: Apply manifests & roll deployment
+        run: |
+          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "
+            set -euo pipefail
+            export KUBECONFIG=\$HOME/.kube/config
+
+            # Postgres first (the app waits for it on startup)
+            kubectl apply -f ~/shipflow/k8s/postgres.yaml
+            kubectl -n codepylot rollout status deploy/codepylot-postgres --timeout=3m
+
+            # Apply the rest (deployment, service, ingress, cronjobs)
+            kubectl apply -f ~/shipflow/k8s/
+
+            # Pin to the freshly built image SHA — gives proper rollback support
+            kubectl -n codepylot set image deploy/codepylot web=${{ steps.img.outputs.ref }}
+
+            # Wait for new pods to come up
+            kubectl -n codepylot rollout status deploy/codepylot --timeout=5m
+          "
+
+      - name: Smoke test (https)
+        run: |
+          # First deploy: cert may take 30–90s to issue. Retry for up to 3 min.
+          for i in $(seq 1 18); do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" -L https://app.codepylot.dev/api/health || true)
+            if [ "$code" = "200" ]; then
+              echo "✓ app.codepylot.dev/api/health returned 200"
               exit 0
             fi
-            echo "Attempt $i: status $STATUS, retrying in 10s..."
+            echo "Attempt $i: got '$code', retrying in 10s…"
             sleep 10
           done
-          echo "Health check failed after 3 attempts"
-          kubectl -n codepylot logs -l app.kubernetes.io/name=codepylot --tail=50
+          echo "✗ app.codepylot.dev did not return 200 within 3 minutes"
+          echo "Cert may still be issuing — check: kubectl describe certificate codepylot-tls -n codepylot"
           exit 1
-
-      - name: Notify deployment
-        if: success()
-        run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Namespace:** codepylot" >> $GITHUB_STEP_SUMMARY
-          echo "- **URL:** https://${{ vars.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-
-  # ── Step 4: Rollback on failure ────────────────────────────
-  rollback:
-    runs-on: ubuntu-latest
-    needs: deploy
-    if: failure()
-    environment: production
-
-    steps:
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-
-      - name: Rollback to previous release
-        run: |
-          echo "Deployment failed, rolling back..."
-          helm rollback codepylot -n codepylot
-          kubectl -n codepylot rollout status deployment/codepylot --timeout=3m
-          echo "Rollback complete"

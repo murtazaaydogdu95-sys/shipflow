@@ -1,0 +1,91 @@
+# In-cluster PostgreSQL for CodePylot.
+# Credentials come from the `codepylot-secret` Secret (synced by the deploy workflow).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codepylot-pgdata
+  namespace: codepylot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path # k3s default provisioner
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codepylot-postgres
+  namespace: codepylot
+  labels:
+    app: codepylot-postgres
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate # never run two pods against one RWO volume
+  selector:
+    matchLabels:
+      app: codepylot-postgres
+  template:
+    metadata:
+      labels:
+        app: codepylot-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            # PGDATA points at a subdir so initdb never sees the volume root
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          envFrom:
+            - secretRef:
+                name: codepylot-secret # provides POSTGRES_USER/PASSWORD/DB
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: codepylot-pgdata
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: codepylot
+  labels:
+    app: codepylot-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: codepylot-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

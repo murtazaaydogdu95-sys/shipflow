@@ -1,0 +1,168 @@
+# Replaces vercel.json crons. Each job curls the in-cluster Service with the
+# CRON_SECRET bearer token. Schedules mirror vercel.json exactly.
+# NOTE: schedules are evaluated in the cluster's timezone (UTC on most k3s nodes).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: codepylot-scheduler
+  namespace: codepylot
+  labels:
+    app: codepylot
+spec:
+  schedule: "* * * * *" # heartbeat agent wake-ups + routine triggers
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 280
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.11.1
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: codepylot-secret
+                      key: CRON_SECRET
+              command: ["/bin/sh", "-c"]
+              args:
+                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/scheduler
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: codepylot-agent-cleanup
+  namespace: codepylot
+  labels:
+    app: codepylot
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.11.1
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: codepylot-secret
+                      key: CRON_SECRET
+              command: ["/bin/sh", "-c"]
+              args:
+                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/agent-cleanup
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: codepylot-webhook-retry
+  namespace: codepylot
+  labels:
+    app: codepylot
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.11.1
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: codepylot-secret
+                      key: CRON_SECRET
+              command: ["/bin/sh", "-c"]
+              args:
+                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/webhook-retry
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: codepylot-recurring
+  namespace: codepylot
+  labels:
+    app: codepylot
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.11.1
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: codepylot-secret
+                      key: CRON_SECRET
+              command: ["/bin/sh", "-c"]
+              args:
+                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/recurring
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { cpu: 50m, memory: 32Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: codepylot-digest
+  namespace: codepylot
+  labels:
+    app: codepylot
+spec:
+  schedule: "0 8 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.11.1
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: codepylot-secret
+                      key: CRON_SECRET
+              command: ["/bin/sh", "-c"]
+              args:
+                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/digest
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { cpu: 50m, memory: 32Mi }
