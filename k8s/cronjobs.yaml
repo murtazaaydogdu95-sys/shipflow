@@ -30,7 +30,7 @@ spec:
                       key: CRON_SECRET
               command: ["/bin/sh", "-c"]
               args:
-                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/scheduler
+                - 'curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/scheduler'
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { cpu: 50m, memory: 32Mi }
@@ -63,7 +63,7 @@ spec:
                       key: CRON_SECRET
               command: ["/bin/sh", "-c"]
               args:
-                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/agent-cleanup
+                - 'curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/agent-cleanup'
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { cpu: 50m, memory: 32Mi }
@@ -96,7 +96,7 @@ spec:
                       key: CRON_SECRET
               command: ["/bin/sh", "-c"]
               args:
-                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/webhook-retry
+                - 'curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/webhook-retry'
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { cpu: 50m, memory: 32Mi }
@@ -129,7 +129,7 @@ spec:
                       key: CRON_SECRET
               command: ["/bin/sh", "-c"]
               args:
-                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/recurring
+                - 'curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/recurring'
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { cpu: 50m, memory: 32Mi }
@@ -162,7 +162,7 @@ spec:
                       key: CRON_SECRET
               command: ["/bin/sh", "-c"]
               args:
-                - curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/digest
+                - 'curl -sf -X POST -H "Authorization: Bearer $CRON_SECRET" http://codepylot.codepylot.svc.cluster.local/api/cron/digest'
               resources:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { cpu: 50m, memory: 32Mi }
