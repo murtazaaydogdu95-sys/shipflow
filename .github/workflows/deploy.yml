@@ -131,6 +131,13 @@ jobs:
           POSTGRES_DB: codepylot
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
+          # Fail early with a clear message if a required secret is missing/empty.
+          # (An empty POSTGRES_PASSWORD makes the postgres image refuse to initialize.)
+          : "${POSTGRES_PASSWORD:?repo secret POSTGRES_PASSWORD is not set}"
+          : "${AUTH_SECRET:?repo secret AUTH_SECRET is not set}"
+          : "${ENCRYPTION_KEY:?repo secret ENCRYPTION_KEY is not set}"
+          : "${CRON_SECRET:?repo secret CRON_SECRET is not set}"
+
           # Build DATABASE_URL pointing at the in-cluster postgres Service
           DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
 
@@ -170,9 +177,20 @@ jobs:
             set -euo pipefail
             export KUBECONFIG=\$HOME/.kube/config
 
+            # On rollout failure, dump why the pods aren't coming up.
+            dump() {
+              echo '----- diagnostics for app='\$1' -----'
+              kubectl -n codepylot get pods -l app=\$1 -o wide || true
+              kubectl -n codepylot describe pods -l app=\$1 || true
+              echo '----- container logs -----'
+              kubectl -n codepylot logs -l app=\$1 --tail=100 --all-containers=true --prefix || true
+              echo '----- recent events -----'
+              kubectl -n codepylot get events --sort-by=.lastTimestamp | tail -n 30 || true
+            }
+
             # Postgres first (the app waits for it on startup)
             kubectl apply -f ~/shipflow/k8s/postgres.yaml
-            kubectl -n codepylot rollout status deploy/codepylot-postgres --timeout=3m
+            kubectl -n codepylot rollout status deploy/codepylot-postgres --timeout=3m || { dump codepylot-postgres; exit 1; }
 
             # Apply the rest (deployment, service, ingress, cronjobs)
             kubectl apply -f ~/shipflow/k8s/
@@ -181,7 +199,7 @@ jobs:
             kubectl -n codepylot set image deploy/codepylot web=${{ steps.img.outputs.ref }}
 
             # Wait for new pods to come up
-            kubectl -n codepylot rollout status deploy/codepylot --timeout=5m
+            kubectl -n codepylot rollout status deploy/codepylot --timeout=5m || { dump codepylot; exit 1; }
           "
 
       - name: Smoke test (https)
