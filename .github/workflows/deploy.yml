@@ -130,6 +130,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GIT_GITHUB_TOKEN: ${{ secrets.GIT_GITHUB_TOKEN }}
+          # GitHub App (per-tenant git auth, Phase 2)
+          GITHUB_APP_ID: ${{ secrets.GH_APP_ID }}
+          GITHUB_APP_SLUG: ${{ secrets.GH_APP_SLUG }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
           # In-cluster Postgres credentials
           POSTGRES_USER: codepylot
           POSTGRES_DB: codepylot
@@ -166,6 +170,9 @@ jobs:
             ANTHROPIC_API_KEY: $(printf '%s' "$ANTHROPIC_API_KEY" | base64 | tr -d '\n')
             CLAUDE_CODE_OAUTH_TOKEN: $(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | base64 | tr -d '\n')
             GIT_GITHUB_TOKEN: $(printf '%s' "$GIT_GITHUB_TOKEN" | base64 | tr -d '\n')
+            GITHUB_APP_ID: $(printf '%s' "$GITHUB_APP_ID" | base64 | tr -d '\n')
+            GITHUB_APP_SLUG: $(printf '%s' "$GITHUB_APP_SLUG" | base64 | tr -d '\n')
+            GITHUB_APP_PRIVATE_KEY: $(printf '%s' "$GITHUB_APP_PRIVATE_KEY" | base64 | tr -d '\n')
             POSTGRES_USER: $(printf '%s' "$POSTGRES_USER" | base64 | tr -d '\n')
             POSTGRES_PASSWORD: $(printf '%s' "$POSTGRES_PASSWORD" | base64 | tr -d '\n')
             POSTGRES_DB: $(printf '%s' "$POSTGRES_DB" | base64 | tr -d '\n')

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { claimAgentSlot } from "@/lib/agent-queue";
 import { getGoalContext } from "@/lib/goals";
 import { getAdapterCredentials } from "@/lib/adapter-config";
+import { isGithubAppConfigured, getInstallationToken, parseOwnerRepo, authedCloneUrl } from "@/lib/github-app";
 
 export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -98,6 +99,33 @@ export function getClaudeBin(): string {
 }
 
 /**
+ * Point the workspace's git remote at a per-tenant GitHub App installation token
+ * so the agent's pull/push authenticate as that project's installation. No-op when
+ * the project has no installation (falls back to the platform-wide git config).
+ */
+export async function configureWorkspaceGitAuth(
+  workingDir: string,
+  project: { githubRepo: string | null; githubInstallationId: string | null }
+): Promise<void> {
+  if (!project.githubInstallationId || !isGithubAppConfigured()) return;
+  const ownerRepo = parseOwnerRepo(project.githubRepo);
+  if (!ownerRepo) return;
+  try {
+    const token = await getInstallationToken(project.githubInstallationId);
+    const url = authedCloneUrl(token, ownerRepo.owner, ownerRepo.repo);
+    execFileSync(getGitBin(), ["remote", "set-url", "origin", url], {
+      cwd: workingDir,
+      encoding: "utf-8",
+      timeout: 15000,
+    });
+  } catch (err) {
+    console.warn(
+      `[agent-executor] per-tenant git auth setup failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
+/**
  * Create or checkout a branch for the story.
  * Uses the story type to determine the branch prefix.
  * Returns the branch name.
@@ -163,7 +191,7 @@ interface SpawnOptions {
 export async function spawnAgent({ storyId, projectId, agentId, feedback, onComplete }: SpawnOptions) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { agentWorkingDir: true, apiKey: true, orgId: true },
+    select: { agentWorkingDir: true, apiKey: true, orgId: true, githubRepo: true, githubInstallationId: true },
   });
 
   if (!project?.apiKey) return;
@@ -218,6 +246,10 @@ export async function spawnAgent({ storyId, projectId, agentId, feedback, onComp
 
   // Everything after slot claim is wrapped in try/catch so failures
   // revert the story instead of leaving it stuck in IN_PROGRESS.
+  // Per-tenant git auth: point the workspace remote at a short-lived GitHub App
+  // installation token (no-op if the project has no installation configured).
+  await configureWorkspaceGitAuth(workingDir, project);
+
   let branchName: string;
   try {
     branchName = await ensureBranch(story, workingDir);

@@ -287,6 +287,15 @@ export default function SettingsPage() {
               placeholder="https://github.com/user/repo"
               className="mt-1"
             />
+            <p className="mt-2 text-xs text-muted-foreground">
+              Connect the GitHub App so agents can push to this repo with a
+              short-lived, repo-scoped token (recommended for teams).
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-2">
+              <a href={`/api/github/app/install?projectId=${projectId}`}>
+                Connect GitHub App
+              </a>
+            </Button>
           </div>
           <Button onClick={handleSave} disabled={saving} data-testid="settings-save-btn">
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
