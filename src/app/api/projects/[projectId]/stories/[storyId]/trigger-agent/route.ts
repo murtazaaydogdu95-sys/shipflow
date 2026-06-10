@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { triggerClaudeAgent } from "@/lib/agent-trigger";
 import { sanitizeError, parseJsonBody } from "@/lib/api-error";
+import { agentRunRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(
@@ -11,6 +12,15 @@ export async function POST(
   const { projectId, storyId } = await params;
   const access = await requireProjectAccess(req, projectId);
   if (!access) return unauthorizedResponse();
+
+  // Abuse guard: cap agent triggers per project (multi-tenant runaway protection).
+  const rl = await agentRunRateLimit.check(`agent:${projectId}`);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { triggered: false, error: "Too many agent runs — slow down and try again shortly." },
+      { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000))) } }
+    );
+  }
 
   // Verify story belongs to this project
   const storyCheck = await prisma.story.findFirst({ where: { id: storyId, projectId }, select: { id: true } });

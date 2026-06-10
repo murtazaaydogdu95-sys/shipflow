@@ -28,6 +28,16 @@ export async function GET(req: Request) {
       where: { id: projectId },
       data: { githubInstallationId: installationId },
     });
+    // Audit trail for a security-sensitive action (external git access granted).
+    await prisma.activity.create({
+      data: {
+        type: "GITHUB_APP_CONNECTED",
+        message: "GitHub App installation connected for per-tenant git access",
+        projectId,
+        userId: access.type === "session" ? access.userId : undefined,
+        metadata: JSON.stringify({ installationId }),
+      },
+    }).catch(() => {});
   }
 
   return NextResponse.redirect(`${appBase}/projects/${projectId}/settings?github=connected`);

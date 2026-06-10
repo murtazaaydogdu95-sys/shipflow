@@ -120,3 +120,6 @@ function rateLimit(config: RateLimitConfig) {
 export const apiRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 60, prefix: "rl:api" });
 export const authRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 10, prefix: "rl:auth" });
 export const aiRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 10, prefix: "rl:ai" });
+// Abuse guard for multi-tenant agent execution: cap manual agent triggers per
+// project (concurrency is separately bounded by the agent-slot/plan limits).
+export const agentRunRateLimit = rateLimit({ windowMs: 60_000, maxRequests: 20, prefix: "rl:agent" });
