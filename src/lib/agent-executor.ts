@@ -7,6 +7,7 @@ import { claimAgentSlot } from "@/lib/agent-queue";
 import { getGoalContext } from "@/lib/goals";
 import { getAdapterCredentials } from "@/lib/adapter-config";
 import { isGithubAppConfigured, getInstallationToken, parseOwnerRepo, authedCloneUrl } from "@/lib/github-app";
+import { isPodExecutionEnabled, dispatchRunnerPod } from "@/lib/agent-pod-runner";
 
 export const AGENT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -125,6 +126,18 @@ export async function configureWorkspaceGitAuth(
   }
 }
 
+/** Deterministic branch name for a story (shared by inline + pod execution). */
+export function computeBranchName(story: { shortId: string; title: string; type: string; branchName: string | null }): string {
+  if (story.branchName) return story.branchName;
+  const slug = story.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  const prefix = BRANCH_PREFIX[story.type] || "feat";
+  return `${prefix}/${story.shortId}-${slug}`;
+}
+
 /**
  * Create or checkout a branch for the story.
  * Uses the story type to determine the branch prefix.
@@ -148,13 +161,7 @@ export async function ensureBranch(
   }
 
   // Create new branch from main
-  const slug = story.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-  const prefix = BRANCH_PREFIX[story.type] || "feat";
-  const branchName = `${prefix}/${story.shortId}-${slug}`;
+  const branchName = computeBranchName(story);
 
   try {
     execFileSync(getGitBin(), ["checkout", "main"], opts);
@@ -174,6 +181,147 @@ export async function ensureBranch(
 
   console.log(`[agent-executor] created branch: ${branchName}`);
   return branchName;
+}
+
+type StoryForPrompt = {
+  id: string;
+  shortId: string;
+  title: string;
+  description: string | null;
+  userStory: string | null;
+  priority: string;
+  acceptanceCriteria: { given: string; when: string; then: string }[];
+};
+
+/** Build the MCP server config object handed to the Claude agent. */
+function buildMcpConfigObject(project: { apiKey: string | null }, projectId: string) {
+  return {
+    mcpServers: {
+      codepylot: {
+        command: "node",
+        args: [path.resolve(process.cwd(), "packages/mcp-server/dist/index.js")],
+        env: {
+          CODEPYLOT_API_URL: process.env.NEXTAUTH_URL || "http://localhost:3000",
+          CODEPYLOT_API_KEY: project.apiKey,
+          CODEPYLOT_PROJECT_ID: projectId,
+        },
+      },
+    },
+  };
+}
+
+/** Build the agent prompt (criteria, past-review patterns, goal context, feedback). */
+async function buildAgentPrompt(
+  story: StoryForPrompt,
+  projectId: string,
+  feedback?: string
+): Promise<string> {
+  let pastFeedback = "";
+  try {
+    const recentRejections = await prisma.activity.findMany({
+      where: { projectId, type: "STORY_MOVED", message: { contains: "Review feedback:" } },
+      select: { message: true },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    });
+    if (recentRejections.length > 0) {
+      const patterns = recentRejections
+        .map((r, i) => `  ${i + 1}. ${r.message.replace("Review feedback: ", "")}`)
+        .join("\n");
+      pastFeedback = `\n📋 PAST REVIEW PATTERNS — The user has previously requested these changes on other stories in this project. Proactively address them:\n${patterns}`;
+    }
+  } catch {
+    // Non-critical
+  }
+
+  const acList = story.acceptanceCriteria
+    .map((ac) => `  - Given ${ac.given}, When ${ac.when}, Then ${ac.then}`)
+    .join("\n");
+
+  const promptParts = [
+    `You are working on story ${story.shortId}: "${story.title}"`,
+    `\nStory ID (use this for all MCP tool calls): ${story.id}`,
+    story.description ? `\nDescription: ${story.description}` : "",
+    story.userStory ? `\nUser Story: ${story.userStory}` : "",
+    acList ? `\nAcceptance Criteria:\n${acList}` : "",
+    `\nPriority: ${story.priority}`,
+    pastFeedback,
+  ];
+
+  try {
+    const goalContext = await getGoalContext(story.id);
+    if (goalContext) promptParts.push(goalContext);
+  } catch {
+    // Non-critical
+  }
+
+  if (feedback) {
+    promptParts.push(
+      `\n⚠️ REVIEW FEEDBACK — The user reviewed your previous work and requested changes:`,
+      `"${feedback}"`,
+      `\nFix the issues described above. Do not start from scratch — only address the feedback.`
+    );
+  }
+
+  promptParts.push(
+    `\nInstructions:`,
+    `1. First call update_story_status with storyId "${story.id}" to move the story to IN_PROGRESS`,
+    `2. ${feedback ? "Fix the issues described in the review feedback" : "Implement the feature/fix described above"}`,
+    `3. When done, call complete_story with storyId "${story.id}", a summary and commit hash — this moves the story to REVIEW for the user to approve`,
+    `4. Do NOT move the story to DONE — the user will review and approve it`,
+    `5. If you get stuck, call add_note with progress details`
+  );
+
+  return promptParts.join("\n");
+}
+
+/** Dispatch an isolated run to an ephemeral Job (Phase 3). */
+async function dispatchIsolatedRun(args: {
+  project: { apiKey: string | null; githubRepo: string | null; githubInstallationId: string | null };
+  projectId: string;
+  storyId: string;
+  story: StoryForPrompt;
+  agentRecord: { id: string; adapterConfig: unknown } | null;
+  branchName: string;
+  feedback?: string;
+}): Promise<void> {
+  const { project, projectId, storyId, story, agentRecord, branchName, feedback } = args;
+
+  const ownerRepo = parseOwnerRepo(project.githubRepo);
+  if (!ownerRepo) throw new Error("project has no parseable githubRepo for isolated run");
+
+  let gitToken: string | null = null;
+  if (project.githubInstallationId && isGithubAppConfigured()) {
+    gitToken = await getInstallationToken(project.githubInstallationId);
+  } else if (process.env.GIT_GITHUB_TOKEN) {
+    gitToken = process.env.GIT_GITHUB_TOKEN;
+  }
+  if (!gitToken) throw new Error("no git credentials available for isolated run");
+
+  const creds = getAdapterCredentials(agentRecord?.adapterConfig as Record<string, unknown> | null);
+  const prompt = await buildAgentPrompt(story, projectId, feedback);
+  const mcpConfig = JSON.stringify(buildMcpConfigObject(project, projectId));
+  const runId = `${story.shortId}-${Date.now().toString(36)}`
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .slice(0, 50);
+
+  await dispatchRunnerPod({
+    runId,
+    storyId,
+    projectId,
+    repoUrl: authedCloneUrl(gitToken, ownerRepo.owner, ownerRepo.repo),
+    branch: branchName,
+    prompt,
+    mcpConfig,
+    codepylotApiUrl: process.env.NEXTAUTH_URL || "http://localhost:3000",
+    codepylotApiKey: project.apiKey || "",
+    anthropicApiKey: creds.apiKey || process.env.ANTHROPIC_API_KEY || null,
+    claudeOauthToken: creds.oauthToken || process.env.CLAUDE_CODE_OAUTH_TOKEN || null,
+    image: process.env.RUNNER_IMAGE || "ghcr.io/murtazaaydogdu95-sys/shipflow:latest",
+    serviceAccount: process.env.RUNNER_SERVICE_ACCOUNT || "codepylot-runner",
+  });
+  console.log(`[agent-executor] dispatched isolated run ${runId} for ${story.shortId}`);
 }
 
 interface SpawnOptions {
@@ -208,7 +356,8 @@ export async function spawnAgent({ storyId, projectId, agentId, feedback, onComp
     }
   }
 
-  if (!workingDir) return;
+  // Inline execution needs a workspace; isolated pod execution clones fresh.
+  if (!workingDir && !isPodExecutionEnabled()) return;
 
   const story = await prisma.story.findUnique({
     where: { id: storyId },
@@ -246,6 +395,31 @@ export async function spawnAgent({ storyId, projectId, agentId, feedback, onComp
 
   // Everything after slot claim is wrapped in try/catch so failures
   // revert the story instead of leaving it stuck in IN_PROGRESS.
+
+  // ── Isolated pod execution (Phase 3) ─────────────────────────────────────
+  // Dispatch the run to an ephemeral, locked-down Job instead of spawning Claude
+  // inside the app pod. The runner clones fresh and reports back via MCP.
+  if (isPodExecutionEnabled()) {
+    try {
+      const branchName = computeBranchName(story);
+      if (!story.branchName) {
+        await prisma.story.update({ where: { id: storyId }, data: { branchName } });
+      }
+      await dispatchIsolatedRun({ project, projectId, storyId, story, agentRecord, branchName, feedback });
+      await prisma.story.update({ where: { id: storyId }, data: { agentStatus: "RUNNING" } });
+    } catch (err) {
+      console.error(`[agent-executor] pod dispatch failed for ${story.shortId}:`, err);
+      await prisma.story.update({
+        where: { id: storyId },
+        data: { status: "TODO", agentStatus: "FAILED", assignedToAgent: false },
+      });
+    }
+    return;
+  }
+
+  // Inline path requires a real workspace (narrows the type below).
+  if (!workingDir) return;
+
   // Per-tenant git auth: point the workspace remote at a short-lived GitHub App
   // installation token (no-op if the project has no installation configured).
   await configureWorkspaceGitAuth(workingDir, project);
@@ -262,90 +436,10 @@ export async function spawnAgent({ storyId, projectId, agentId, feedback, onComp
     return;
   }
 
-  // Build MCP config
+  // Build MCP config + prompt (shared with isolated pod execution)
   const configPath = `/tmp/codepylot-mcp-${storyId}.json`;
-  const mcpConfig = {
-    mcpServers: {
-      codepylot: {
-        command: "node",
-        args: [path.resolve(process.cwd(), "packages/mcp-server/dist/index.js")],
-        env: {
-          CODEPYLOT_API_URL: process.env.NEXTAUTH_URL || "http://localhost:3000",
-          CODEPYLOT_API_KEY: project.apiKey,
-          CODEPYLOT_PROJECT_ID: projectId,
-        },
-      },
-    },
-  };
-
-  writeFileSync(configPath, JSON.stringify(mcpConfig, null, 2));
-
-  // Query past rejection feedback for this project (agent learning)
-  let pastFeedback = "";
-  try {
-    const recentRejections = await prisma.activity.findMany({
-      where: {
-        projectId,
-        type: "STORY_MOVED",
-        message: { contains: "Review feedback:" },
-      },
-      select: { message: true },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-    });
-    if (recentRejections.length > 0) {
-      const patterns = recentRejections
-        .map((r, i) => `  ${i + 1}. ${r.message.replace("Review feedback: ", "")}`)
-        .join("\n");
-      pastFeedback = `\n📋 PAST REVIEW PATTERNS — The user has previously requested these changes on other stories in this project. Proactively address them:\n${patterns}`;
-    }
-  } catch {
-    // Non-critical — continue without past feedback
-  }
-
-  // Build prompt
-  const acList = story.acceptanceCriteria
-    .map((ac) => `  - Given ${ac.given}, When ${ac.when}, Then ${ac.then}`)
-    .join("\n");
-
-  const promptParts = [
-    `You are working on story ${story.shortId}: "${story.title}"`,
-    `\nStory ID (use this for all MCP tool calls): ${story.id}`,
-    story.description ? `\nDescription: ${story.description}` : "",
-    story.userStory ? `\nUser Story: ${story.userStory}` : "",
-    acList ? `\nAcceptance Criteria:\n${acList}` : "",
-    `\nPriority: ${story.priority}`,
-    pastFeedback,
-  ];
-
-  // Add goal context if story is linked to a goal
-  try {
-    const goalContext = await getGoalContext(storyId);
-    if (goalContext) {
-      promptParts.push(goalContext);
-    }
-  } catch {
-    // Non-critical — continue without goal context
-  }
-
-  if (feedback) {
-    promptParts.push(
-      `\n⚠️ REVIEW FEEDBACK — The user reviewed your previous work and requested changes:`,
-      `"${feedback}"`,
-      `\nFix the issues described above. Do not start from scratch — only address the feedback.`,
-    );
-  }
-
-  promptParts.push(
-    `\nInstructions:`,
-    `1. First call update_story_status with storyId "${story.id}" to move the story to IN_PROGRESS`,
-    `2. ${feedback ? "Fix the issues described in the review feedback" : "Implement the feature/fix described above"}`,
-    `3. When done, call complete_story with storyId "${story.id}", a summary and commit hash — this moves the story to REVIEW for the user to approve`,
-    `4. Do NOT move the story to DONE — the user will review and approve it`,
-    `5. If you get stuck, call add_note with progress details`,
-  );
-
-  const prompt = promptParts.join("\n");
+  writeFileSync(configPath, JSON.stringify(buildMcpConfigObject(project, projectId), null, 2));
+  const prompt = await buildAgentPrompt(story, projectId, feedback);
 
   // Resolve claude binary lazily
   const claudeBin = getClaudeBin();

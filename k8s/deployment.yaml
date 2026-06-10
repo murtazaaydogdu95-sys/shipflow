@@ -21,6 +21,8 @@ spec:
       labels:
         app: codepylot
     spec:
+      # SA with RBAC to create the isolated runner Jobs (k8s/agent-runner-rbac.yaml)
+      serviceAccountName: codepylot-app
       imagePullSecrets:
         - name: ghcr-login-secret
       # fsGroup so the mounted repos volume is writable by the non-root user
@@ -51,6 +53,11 @@ spec:
               value: "/app/repos"
             - name: OLLAMA_URL
               value: "http://ollama:11434/v1" # in-cluster Ollama (k8s/ollama.yaml)
+            # Agent execution: "inline" (in this pod) or "pod" (isolated ephemeral
+            # Job per run — Phase 3). Set to "pod" once RBAC is applied to go
+            # multi-tenant-safe. RUNNER_IMAGE is pinned by the deploy workflow.
+            - name: AGENT_EXECUTION_MODE
+              value: "inline"
           envFrom:
             - secretRef:
                 name: codepylot-secret # DATABASE_URL, AUTH_SECRET, ENCRYPTION_KEY, CRON_SECRET, OAuth, ...

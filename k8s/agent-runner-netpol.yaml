@@ -1,0 +1,50 @@
+# Egress lock-down for isolated runner pods (Phase 3).
+#
+# ⚠️ IMPORTANT: k3s ships with flannel, which does NOT enforce NetworkPolicy.
+# This manifest only takes effect if your cluster runs a policy-enforcing CNI
+# (Calico, Cilium) OR you installed the k3s network-policy controller. Without
+# one, runner pods are NOT network-restricted — verify before going multi-tenant.
+#
+# Intent: runner pods may reach DNS + HTTPS (GitHub, Anthropic, and the in-cluster
+# app API for MCP callbacks) but nothing else in the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: codepylot-runner-egress
+  namespace: codepylot
+spec:
+  podSelector:
+    matchLabels:
+      app: codepylot-runner
+  policyTypes:
+    - Egress
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # In-cluster app API (MCP callbacks) — the codepylot Service
+    - to:
+        - podSelector:
+            matchLabels:
+              app: codepylot
+      ports:
+        - protocol: TCP
+          port: 3000
+    # External HTTPS (GitHub + Anthropic). NetworkPolicy can't match DNS names,
+    # so this allows all external 443; tighten with CIDRs or an egress proxy if
+    # you need a strict allow-list.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

@@ -219,6 +219,9 @@ jobs:
             # Pin to the freshly built image SHA — gives proper rollback support
             kubectl -n codepylot set image deploy/codepylot web=${{ steps.img.outputs.ref }}
 
+            # Keep the isolated-runner image (Phase 3) in lockstep with the app image
+            kubectl -n codepylot set env deploy/codepylot RUNNER_IMAGE=${{ steps.img.outputs.ref }}
+
             # Always restart so the app picks up any changed Secret values (env from a
             # Secret is baked in at pod creation; set image to an unchanged SHA is a no-op).
             # Zero-downtime: the deployment uses maxUnavailable=0, maxSurge=1.

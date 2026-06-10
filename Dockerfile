@@ -72,9 +72,10 @@ COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
 COPY --from=builder /app/packages/mcp-server/dist ./packages/mcp-server/dist
 COPY --from=builder /app/packages/mcp-server/package.json ./packages/mcp-server/package.json
 
-# Copy entrypoint
+# Copy entrypoints (app + isolated agent runner used by Phase 3 pod execution)
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
+COPY docker-runner-entrypoint.sh ./docker-runner-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh ./docker-runner-entrypoint.sh
 
 # Set ownership
 RUN chown -R nextjs:nodejs /app

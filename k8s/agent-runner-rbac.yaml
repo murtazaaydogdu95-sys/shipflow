@@ -1,0 +1,52 @@
+# RBAC for Phase 3 isolated agent execution.
+#
+# - codepylot-app: the app pod's ServiceAccount, allowed to create/manage the
+#   ephemeral runner Jobs + their per-run Secrets in this namespace.
+# - codepylot-runner: the runner pods' ServiceAccount — intentionally has NO
+#   permissions and its token is not even mounted (automountServiceAccountToken:
+#   false in the Job spec), so a compromised run can't touch the cluster.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codepylot-app
+  namespace: codepylot
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codepylot-runner
+  namespace: codepylot
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: codepylot-runner-manager
+  namespace: codepylot
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "get", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: codepylot-app-runner-manager
+  namespace: codepylot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: codepylot-runner-manager
+subjects:
+  - kind: ServiceAccount
+    name: codepylot-app
+    namespace: codepylot
