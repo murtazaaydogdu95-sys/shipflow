@@ -79,8 +79,14 @@ export async function getInstallationToken(installationId: string): Promise<stri
 
 /** Build the URL that sends a user to install the App on their repo(s). */
 export function getInstallUrl(state: string): string {
-  const slug = process.env.GITHUB_APP_SLUG;
-  if (!slug) throw new Error("GITHUB_APP_SLUG not configured");
+  const raw = process.env.GITHUB_APP_SLUG;
+  if (!raw) throw new Error("GITHUB_APP_SLUG not configured");
+  // Tolerate either a bare slug ("codepylot-ai-agent") or the full app URL
+  // ("https://github.com/apps/codepylot-ai-agent").
+  const slug = raw
+    .replace(/^https?:\/\/github\.com\/apps\//i, "")
+    .replace(/\/.*$/, "")
+    .trim();
   return `https://github.com/apps/${slug}/installations/new?state=${encodeURIComponent(state)}`;
 }
 
