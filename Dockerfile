@@ -37,9 +37,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install git (GitHub import clone), prisma CLI + tsx (entrypoint), and the
-# Claude Code CLI (used by the "claude" agent adapter to run coding agents)
-RUN apk add --no-cache git && \
+# Install git (GitHub import clone), bash (REQUIRED by the Claude Code CLI for its
+# Bash tool + spawning stdio MCP servers — alpine only ships busybox sh),
+# prisma CLI + tsx (entrypoint), and the Claude Code CLI itself
+RUN apk add --no-cache git bash && \
     npm install -g prisma@6 tsx @anthropic-ai/claude-code
 
 # Create non-root user
@@ -53,6 +54,8 @@ RUN mkdir -p /app/repos && chown nextjs:nodejs /app/repos
 # (~/.claude) both need it at runtime
 RUN mkdir -p /home/nextjs/.claude && chown -R nextjs:nodejs /home/nextjs
 ENV HOME=/home/nextjs
+# Claude Code CLI reads SHELL to locate a shell for its Bash tool / MCP spawns
+ENV SHELL=/bin/bash
 
 # Copy standalone output
 COPY --from=builder /app/.next/standalone ./
