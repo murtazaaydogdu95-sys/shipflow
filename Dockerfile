@@ -71,9 +71,12 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # Copy seed script
 COPY --from=builder /app/prisma/seed.ts ./prisma/seed.ts
 
-# Copy MCP server dist
+# Copy MCP server dist + its node_modules (the agent spawns it as a stdio server;
+# tsc only transpiles, so its runtime deps must be present or it fails to start
+# and the codepylot story-workflow tools never load)
 COPY --from=builder /app/packages/mcp-server/dist ./packages/mcp-server/dist
 COPY --from=builder /app/packages/mcp-server/package.json ./packages/mcp-server/package.json
+COPY --from=builder /app/packages/mcp-server/node_modules ./packages/mcp-server/node_modules
 
 # Copy entrypoints (app + isolated agent runner used by Phase 3 pod execution)
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
