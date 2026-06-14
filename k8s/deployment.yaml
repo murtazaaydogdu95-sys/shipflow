@@ -23,8 +23,8 @@ spec:
     spec:
       # SA with RBAC to create the isolated runner Jobs (k8s/agent-runner-rbac.yaml)
       serviceAccountName: codepylot-app
-      imagePullSecrets:
-        - name: ghcr-login-secret
+      # GHCR package is public — no imagePullSecrets needed. (Re-add one from a
+      # durable PAT if you make the package private again.)
       # fsGroup so the mounted repos volume is writable by the non-root user
       securityContext:
         fsGroup: 1001

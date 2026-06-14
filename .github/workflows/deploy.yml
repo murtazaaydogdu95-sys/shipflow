@@ -105,16 +105,11 @@ jobs:
           ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
             'export KUBECONFIG=$HOME/.kube/config && kubectl apply -f ~/shipflow/k8s/namespace.yaml'
 
-      - name: Create GHCR image pull secret
-        run: |
-          ssh "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "
-            export KUBECONFIG=\$HOME/.kube/config
-            kubectl -n codepylot create secret docker-registry ghcr-login-secret \
-              --docker-server=ghcr.io \
-              --docker-username='${{ github.actor }}' \
-              --docker-password='${{ secrets.GITHUB_TOKEN }}' \
-              --dry-run=client -o yaml | kubectl apply -f -
-          "
+      # No GHCR pull secret needed: the image package is public. (Creating one from
+      # the ephemeral Actions token caused 403s on restart once the token expired,
+      # and a stale secret even blocks anonymous pulls of a public image.)
+      # If you make the package private again, recreate ghcr-login-secret from a
+      # durable PAT with read:packages and re-add imagePullSecrets to the manifests.
 
       - name: Sync runtime secrets to cluster
         env:

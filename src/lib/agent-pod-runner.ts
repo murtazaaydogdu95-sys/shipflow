@@ -88,9 +88,7 @@ export function buildRunnerJob(spec: RunnerSpec, namespace: string) {
         metadata: { labels: { app: "codepylot-runner", "codepylot.run": spec.runId } },
         spec: {
           restartPolicy: "Never",
-          // Pull the runner image (same as the app image). Harmless when the
-          // package is public; required when it's private.
-          imagePullSecrets: [{ name: "ghcr-login-secret" }],
+          // Runner image is public (same as app image) — no pull secret needed.
           // Runner gets NO app credentials and NO k8s API access.
           serviceAccountName: spec.serviceAccount ?? "codepylot-runner",
           automountServiceAccountToken: false,
