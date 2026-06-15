@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireProjectAccess, unauthorizedResponse } from "@/lib/api-auth";
 import { execFileSync } from "child_process";
 import { sanitizeError, parseJsonBody } from "@/lib/api-error";
+import { isGithubAppConfigured, getInstallationToken } from "@/lib/github-app";
 
 const BRANCH_NAME_RE = /^[a-zA-Z0-9\/_.\-]+$/;
 
@@ -43,7 +44,7 @@ export async function POST(
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { agentWorkingDir: true },
+    select: { agentWorkingDir: true, githubInstallationId: true },
   });
 
   if (!project?.agentWorkingDir) {
@@ -53,69 +54,74 @@ export async function POST(
     );
   }
 
-  // Get GitHub token for authenticated push
+  // Resolve a push token: prefer the project's GitHub App installation token
+  // (per-tenant), then the user's GitHub OAuth token, then a platform PAT.
   let githubToken: string | null = null;
-  if (access.type === "session") {
+  if (project.githubInstallationId && isGithubAppConfigured()) {
+    try {
+      githubToken = await getInstallationToken(project.githubInstallationId);
+    } catch {
+      // fall through to other token sources
+    }
+  }
+  if (!githubToken && access.type === "session") {
     const account = await prisma.account.findFirst({
       where: { userId: access.userId, provider: "github" },
       select: { access_token: true },
     });
     githubToken = account?.access_token ?? null;
   }
+  if (!githubToken) githubToken = process.env.GIT_GITHUB_TOKEN ?? null;
 
   const cwd = project.agentWorkingDir;
   const opts = { cwd, encoding: "utf-8" as const, timeout: 30000 };
 
+  // Build an authed remote URL: strip ANY existing credentials first, then inject
+  // the token. (The workspace remote may already embed a per-tenant token, which
+  // would otherwise produce https://x-access-token:T1@x-access-token:T2@github.com.)
+  const authedUrl = (): string => {
+    const remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], opts).trim();
+    const base = remoteUrl.replace(/^https:\/\/[^@/]+@/, "https://");
+    return githubToken ? base.replace(/^https:\/\//, `https://x-access-token:${githubToken}@`) : base;
+  };
+
+  // Helper: fetch a branch from origin (needed when the branch was pushed by an
+  // isolated runner pod and isn't present in this workspace yet).
+  const fetchBranch = (branch: string) => {
+    try {
+      execFileSync("git", ["fetch", authedUrl(), branch], { ...opts, timeout: 60000 });
+    } catch {
+      // Branch may already be local / not on remote — handled by checkout below
+    }
+  };
+
   // Helper: pull remote changes (rebase) before pushing to avoid rejection
   const pullBeforePush = (branch: string) => {
     try {
-      if (githubToken) {
-        const remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], opts).trim();
-        const authedUrl = remoteUrl.replace(
-          /^https:\/\//,
-          `https://x-access-token:${githubToken}@`
-        );
-        try {
-          execFileSync("git", ["pull", "--rebase", authedUrl, branch], { ...opts, timeout: 60000 });
-        } finally {
-          execFileSync("git", ["remote", "set-url", "origin", remoteUrl], opts);
-        }
-      } else {
-        execFileSync("git", ["pull", "--rebase", "origin", branch], { ...opts, timeout: 60000 });
-      }
+      execFileSync("git", ["pull", "--rebase", authedUrl(), branch], { ...opts, timeout: 60000 });
     } catch {
       // Pull may fail if remote branch doesn't exist yet — that's fine
     }
   };
 
-  // Helper: push with token-authenticated URL, then restore clean URL
+  // Helper: push with a token-authenticated URL (creds never persisted in remote)
   const authenticatedPush = (branch: string) => {
-    // Pull first to integrate any remote changes
     pullBeforePush(branch);
-
-    if (githubToken) {
-      // Read current remote URL and inject token
-      const remoteUrl = execFileSync("git", ["remote", "get-url", "origin"], opts).trim();
-      const authedUrl = remoteUrl.replace(
-        /^https:\/\//,
-        `https://x-access-token:${githubToken}@`
-      );
-      try {
-        execFileSync("git", ["push", authedUrl, branch], { ...opts, timeout: 60000 });
-      } finally {
-        // Ensure clean URL is always restored (never persist token in remote)
-        execFileSync("git", ["remote", "set-url", "origin", remoteUrl], opts);
-      }
-    } else {
-      // Fallback: push without token (may work with SSH remotes or credential helpers)
-      execFileSync("git", ["push", "origin", branch], { ...opts, timeout: 60000 });
-    }
+    execFileSync("git", ["push", authedUrl(), branch], { ...opts, timeout: 60000 });
   };
 
   try {
     if (branchName) {
-      // Branch merge workflow: commit remaining changes on branch, merge to main, push
-      execFileSync("git", ["checkout", branchName], opts);
+      // Branch merge workflow: commit remaining changes on branch, merge to main, push.
+      // Fetch first so a branch pushed by an isolated runner pod (not present in this
+      // workspace) is available to check out.
+      fetchBranch(branchName);
+      try {
+        execFileSync("git", ["checkout", branchName], opts);
+      } catch {
+        // Not a local branch (pod-mode run) — create it from what we just fetched
+        execFileSync("git", ["checkout", "-B", branchName, "FETCH_HEAD"], opts);
+      }
       execFileSync("git", ["add", "."], opts);
       const status = execFileSync("git", ["status", "--porcelain"], opts).trim();
       if (status) {
@@ -124,6 +130,7 @@ export async function POST(
       }
 
       execFileSync("git", ["checkout", "main"], opts);
+      pullBeforePush("main"); // bring main up to date before merging
       const mergeMsg = `Merge ${branchName}: ${title} [${shortId}]`;
       execFileSync("git", ["merge", branchName, "--no-ff", "-m", mergeMsg], opts);
       authenticatedPush("main");
